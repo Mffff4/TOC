@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     SUBSCRIBE_TELEGRAM: bool = False
     COMMUNITY_CHANNEL: str = "theopencoin_community"
 
+    JOIN_POOLS: bool = False
+    MAX_POOL_FEE: int = 15
+    MAX_POOL_MINERS: int = 40
+
     DEBUG_LOGGING: bool = False
 
     AUTO_UPDATE: bool = True

@@ -271,49 +271,67 @@ class BaseBot:
                         f"Mined: {user_pool.get('tokens_mined', 0)}"
                     )
                     logger.info(f"⛏️ {self.session_name} | {pool_info}")
-                else:
-                    pools = await self.make_request(
-                        "GET",
-                        f"{self._base_url}/pools",
-                        headers=headers
-                    )
                     
-                    if pools:
-                        best_pool = None
-                        max_score = -1
+                    if not settings.JOIN_POOLS:
+                        continue
+                    
+                    # Проверяем, стоит ли оставаться в текущем пуле
+                    current_members = user_pool.get('number_of_miners', 0)
+                    current_fee = user_pool.get('fee_percentage', 100)
+                    
+                    if current_members >= settings.MAX_POOL_MINERS or current_fee > settings.MAX_POOL_FEE:
+                        logger.info(f"🔄 {self.session_name} | Looking for a better pool...")
+                    else:
+                        continue
+                
+                if not settings.JOIN_POOLS:
+                    continue
+                
+                pools = await self.make_request(
+                    "GET",
+                    f"{self._base_url}/pools",
+                    headers=headers
+                )
+                
+                if pools:
+                    best_pool = None
+                    max_score = -1
+                    
+                    for pool in pools:
+                        members = pool.get('numberOfMembers', 0)
+                        tokens = pool.get('tokensMined', 0)
+                        fee = pool.get('feePercentage', 100)
                         
-                        for pool in pools:
-                            members = pool.get('numberOfMembers', 0)
-                            tokens = pool.get('tokensMined', 0)
-                            fee = pool.get('feePercentage', 100)
+                        if members >= settings.MAX_POOL_MINERS or fee > settings.MAX_POOL_FEE:
+                            continue
                             
-                            if members >= 40:
-                                continue
-                                
-                            score = tokens * (100 - fee)
-                            
-                            if score > max_score:
-                                max_score = score
-                                best_pool = pool
+                        # Предпочитаем пулы с меньшим количеством майнеров
+                        member_factor = 1 - (members / settings.MAX_POOL_MINERS)
+                        # Учитываем и намайненные токены, и комиссию
+                        score = (tokens + 1) * (100 - fee) * member_factor
                         
-                        if best_pool:
-                            join_result = await self.make_request(
-                                "POST",
-                                f"{self._base_url}/pools/join-invoice",
-                                headers=headers,
-                                json={
-                                    "miningPoolId": str(best_pool['id']),
-                                    "poolName": best_pool['title']
-                                }
+                        if score > max_score:
+                            max_score = score
+                            best_pool = pool
+                    
+                    if best_pool:
+                        join_result = await self.make_request(
+                            "POST",
+                            f"{self._base_url}/pools/join-invoice",
+                            headers=headers,
+                            json={
+                                "miningPoolId": str(best_pool['id']),
+                                "poolName": best_pool['title']
+                            }
+                        )
+                        if join_result:
+                            logger.info(
+                                f"⭐ {self.session_name} | "
+                                f"Joined pool {best_pool['title']} "
+                                f"(Fee: {best_pool['feePercentage']}%, "
+                                f"Miners: {best_pool['numberOfMembers']}, "
+                                f"Mined: {best_pool['tokensMined']})"
                             )
-                            if join_result:
-                                logger.info(
-                                    f"⭐ {self.session_name} | "
-                                    f"Joined pool {best_pool['title']} "
-                                    f"(Fee: {best_pool['feePercentage']}%, "
-                                    f"Miners: {best_pool['numberOfMembers']}, "
-                                    f"Mined: {best_pool['tokensMined']})"
-                                )
             
                 stats = await self.make_request(
                     "GET", 
