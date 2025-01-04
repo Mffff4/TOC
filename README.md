@@ -99,6 +99,12 @@
 
 ## ⚙️ Settings
 
+REF_ID is a part of the link, for example, in the link 
+
+https://t.me/TheOpenCoin_bot?start=ref_b2434667eb27d01f 
+
+the value ref_b2434667eb27d01f is the referral identifier.
+
 | Parameter                  | Default Value         | Description                                                 |
 |---------------------------|----------------------|-------------------------------------------------------------|
 | **API_ID**                |                      | Telegram API application ID                                 |

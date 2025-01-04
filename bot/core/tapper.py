@@ -112,15 +112,33 @@ class BaseBot:
         if not self._http_client:
             raise InvalidSession("HTTP client not initialized")
 
-        try:
-            async with getattr(self._http_client, method.lower())(url, **kwargs) as response:
-                if response.status == 200:
-                    return await response.json()
-                logger.error(f"Request failed with status {response.status}")
-                return None
-        except Exception as e:
-            logger.error(f"Request error: {str(e)}")
-            return None
+        max_retries = 3
+        retry_delay = 1
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                async with getattr(self._http_client, method.lower())(url, **kwargs) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    elif response.status == 500:
+                        # Для 500 ошибок делаем повторные попытки без логирования
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay * (attempt + 1))
+                            continue
+                        return None
+                    else:
+                        logger.error(f"Request failed with status {response.status}")
+                        return None
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (attempt + 1))
+                    continue
+                
+        if last_error:
+            logger.error(f"Request error after {max_retries} retries: {str(last_error)}")
+        return None
 
     async def run(self) -> None:
         if not await self.initialize_session():
