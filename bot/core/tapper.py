@@ -37,6 +37,7 @@ class BaseBot:
         self._current_ref_id: Optional[str] = None
         self._last_auth_time: Optional[float] = None
         self._auth_interval: int = 3600
+        self._base_url: str = "https://miniapp.theopencoin.xyz/api/v1"
         
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
@@ -174,11 +175,64 @@ class BaseBot:
                     logger.error(f"Unknown error: {error}. Sleeping for {int(sleep_duration)}")
                     await asyncio.sleep(sleep_duration)
 
+    async def check_and_vote_proposals(self, headers: Dict[str, str]) -> None:
+        try:
+            proposals = await self.make_request(
+                "GET",
+                f"{self._base_url}/proposals",
+                headers=headers
+            )
+            
+            if not proposals:
+                return
+                
+            for proposal in proposals:
+                if proposal.get('status') != 'pending':
+                    continue
+                    
+                proposal_id = proposal.get('id')
+                if not proposal_id:
+                    continue
+                    
+                votes = await self.make_request(
+                    "GET",
+                    f"{self._base_url}/proposals/{proposal_id}/votes",
+                    headers=headers
+                )
+                
+                if not votes or votes.get('userVote'):
+                    continue
+                    
+                recent_votes = votes.get('recentVotes', [])
+                if not recent_votes:
+                    continue
+                    
+                vote_distribution = {'true': 0, 'false': 0}
+                for vote in recent_votes:
+                    vote_distribution[str(vote.get('votesForProposal', True)).lower()] += 1
+                    
+                vote_for = vote_distribution['true'] >= vote_distribution['false']
+                
+                vote_result = await self.make_request(
+                    "POST",
+                    f"{self._base_url}/proposals/{proposal_id}/vote",
+                    headers=headers,
+                    json={"voteForProposal": vote_for, "proposalId": proposal_id}
+                )
+                
+                if vote_result:
+                    logger.info(
+                        f"🗳️ {self.session_name} | "
+                        f"Voted {'for' if vote_for else 'against'} proposal #{proposal_id}: "
+                        f"{proposal.get('title')}"
+                    )
+        except Exception as e:
+            logger.error(f"❌ {self.session_name} | Voting error: {str(e)}")
+
     async def process_bot_logic(self) -> None:
         try:
             if not hasattr(self, '_auth_header'):
                 self._auth_header = None
-                self._base_url = "https://miniapp.theopencoin.xyz/api/v1"
                 self._current_block_id = None
                 self._after_block_id = None
                 self._last_auth_time = None
@@ -191,6 +245,8 @@ class BaseBot:
                 self._last_auth_time = current_time
             
             headers = get_toc_headers(self._auth_header)
+            
+            await self.check_and_vote_proposals(headers)
 
             while True:
                 now = datetime.now()
