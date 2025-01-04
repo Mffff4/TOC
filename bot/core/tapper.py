@@ -167,7 +167,6 @@ class BaseBot:
                 tg_web_data = await self.get_tg_web_data()
                 self._auth_header = tg_web_data
                 self._last_auth_time = current_time
-                logger.info(f"🔄 {self.session_name} | Auth token refreshed")
             
             headers = get_toc_headers(self._auth_header)
 
