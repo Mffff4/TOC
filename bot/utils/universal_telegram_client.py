@@ -155,7 +155,8 @@ class UniversalTelegramClient:
                 await self._telethon_initialize_webview_data(bot_username=bot_username)
                 await asyncio.sleep(uniform(1, 2))
 
-                start = {'start_param': self.get_ref_id()} if self.is_first_run else {}
+                ref_id = self.get_ref_id()
+                start = {'start_param': ref_id} if self.is_first_run else {}
 
                 start_state = False
                 async for message in self.client.iter_messages(bot_username):
@@ -164,7 +165,11 @@ class UniversalTelegramClient:
                         break
                 await asyncio.sleep(uniform(0.5, 1))
                 if not start_state:
-                    await self.client(messages.StartBotRequest(**self._webview_data, **start))
+                    await self.client(messages.StartBotRequest(
+                        **self._webview_data,
+                        start_param=ref_id,
+                        random_id=randint(1, 2**63)
+                    ))
                 await asyncio.sleep(uniform(1, 2))
 
                 web_view = await self.client(messages.RequestWebViewRequest(
