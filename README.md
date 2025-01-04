@@ -2,28 +2,42 @@
 
 [🇷🇺 Русский](README-RU.md) | [🇬🇧 English](README.md)
 
-[![Bot Link](https://img.shields.io/badge/Telegram_Bot-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](---)
-[![Channel Link](https://img.shields.io/badge/Telegram_Channel-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](---)
+[![Bot Link](https://img.shields.io/badge/Telegram_Bot-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/TheOpenCoin_bot?start=ref_b2434667eb27d01f)
+[![Channel Link](https://img.shields.io/badge/Telegram_Channel-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/+0ZTdqLZEVvk1ZTZi)
+[![MARKET](https://img.shields.io/badge/Telegram_Market-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/MaineMarketBot?start=01FNMXZP)
 
 ---
 
 ## 📑 Table of Contents
 1. [Description](#description)
-2. [Key Features](#key-features)
-3. [Installation](#installation)
+2. [Free and Paid Versions](#free-and-paid-versions)
+3. [Key Features](#key-features)
+4. [Installation](#installation)
    - [Quick Start](#quick-start)
    - [Manual Installation](#manual-installation)
-4. [Settings](#settings)
-5. [Support and Donations](#support-and-donations)
-6. [Contact](#contact)
-
+5. [Settings](#settings)
+6. [Support and Donations](#support-and-donations)
+7. [Contacts](#contacts)
 ---
 
 ## 📜 Description
-**NAME** is an automated bot for the BITApp game. Supports multithreading, proxy integration, and automatic game management.
+**The Open Coin** is an automated bot for the TOC game. Supports multithreading, proxy integration, and automatic game management.
 
 ---
+## 💰 Free and Paid Versions
+| Functionality | Free Version | Paid Version |
+| --- | --- | --- |
+| Multithreading with accounts | ✅ | ✅ |
+| Support for HTTP/SOCKS5 proxies | ✅ | ✅ |
+| Automatic completion of all tasks | ✅ | ✅ |
+| Automatic updates | ✅ | ✅ |
+| API change protection | ❌ | ✅ |
+| 100% referrals go to you | ❌ | ✅ |
+| Priority updates | ❌ | ✅ |
+| Personal Telegram bot for management | ❌ | ✅ |
+| Access to the closed channel | ❌ | ✅ |
 
+---
 ## 🌟 Key Features
 - 🔄 **Multithreading** — ability to work with multiple accounts in parallel
 - 🔐 **Proxy Support** — secure operation through proxy servers
@@ -37,8 +51,8 @@
 ### Quick Start
 1. **Download the project:**
    ```bash
-   git clone https://github.com/Mffff4/REPNAME.git
-   cd REPNAME
+   git clone https://github.com/Mffff4/TOC.git
+   cd TOC
    ```
 
 2. **Install dependencies:**
@@ -101,6 +115,7 @@
 | **DEVICE_PARAMS**         | False                | Use custom device parameters                                 |
 | **AUTO_UPDATE**           | True                 | Automatic updates                                           |
 | **CHECK_UPDATE_INTERVAL** | 300                  | Update check interval (seconds)                            |
+| **SUBSCRIBE_TELEGRAM_CHANNEL** | False                | Subscribe to the channel                                  |
 
 
 ## 💰 Support and Donations
@@ -126,7 +141,7 @@ Support development using cryptocurrencies:
 ## 📞 Contact
 
 If you have questions or suggestions:
-- **Telegram**: [Join our channel](---)
+- **Telegram**: [Join our channel](https://t.me/+0ZTdqLZEVvk1ZTZi)
 
 ---
 

@@ -35,6 +35,8 @@ class BaseBot:
         self._is_first_run: Optional[bool] = None
         self._init_data: Optional[str] = None
         self._current_ref_id: Optional[str] = None
+        self._last_auth_time: Optional[float] = None
+        self._auth_interval: int = 3600  # 1 час
         
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
@@ -156,10 +158,16 @@ class BaseBot:
                 self._base_url = "https://miniapp.theopencoin.xyz/api/v1"
                 self._current_block_id = None
                 self._after_block_id = None
+                self._last_auth_time = None
             
-            if not self._auth_header:
+            current_time = time()
+            
+            # Обновляем токен если прошел час или его нет
+            if not self._auth_header or not self._last_auth_time or (current_time - self._last_auth_time) >= self._auth_interval:
                 tg_web_data = await self.get_tg_web_data()
                 self._auth_header = tg_web_data
+                self._last_auth_time = current_time
+                logger.info(f"🔄 {self.session_name} | Auth token refreshed")
             
             headers = get_toc_headers(self._auth_header)
 
