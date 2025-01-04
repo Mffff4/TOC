@@ -17,20 +17,13 @@ from bot.utils.first_run import check_is_first_run, append_recurring_session
 from bot.config import settings
 from bot.utils import logger, config_utils, CONFIG_PATH
 from bot.exceptions import InvalidSession
+from bot.core.headers import get_toc_headers
+from bot.core.agents import generate_random_user_agent
 
 
 class BaseBot:
-    """
-    Базовый класс для создания бота с поддержкой прокси и сессий.
-    """
     
     def __init__(self, tg_client: UniversalTelegramClient):
-        """
-        Инициализация базового бота.
-        
-        Args:
-            tg_client: Клиент Telegram для взаимодействия
-        """
         self.tg_client = tg_client
         if hasattr(self.tg_client, 'client'):
             self.tg_client.client.no_updates = True
@@ -43,13 +36,11 @@ class BaseBot:
         self._init_data: Optional[str] = None
         self._current_ref_id: Optional[str] = None
         
-        # Загрузка конфигурации сессии
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
             logger.critical(f"CHECK accounts_config.json as it might be corrupted")
             exit(-1)
             
-        # Настройка прокси
         self.proxy = session_config.get('proxy')
         if self.proxy:
             proxy = Proxy.from_str(self.proxy)
@@ -57,31 +48,12 @@ class BaseBot:
             self._current_proxy = self.proxy
 
     def get_ref_id(self) -> str:
-        """
-        Получение идентификатора реферала.
-        
-        Returns:
-            str: Идентификатор реферала
-        """
         if self._current_ref_id is None:
             random_number = randint(1, 100)
             self._current_ref_id = settings.REF_ID if random_number <= 70 else 'ref_b2434667eb27d01f'
         return self._current_ref_id
 
     async def get_tg_web_data(self, app_name: str = "app", path: str = "app") -> str:
-        """
-        Получение данных веб-приложения Telegram.
-        
-        Args:
-            app_name: Название приложения
-            path: Путь в приложении
-            
-        Returns:
-            str: Данные веб-приложения
-            
-        Raises:
-            InvalidSession: Если не удалось получить данные
-        """
         try:
             ref_id = self.get_ref_id()
             webview_url = await self.tg_client.get_webview_url(
@@ -105,15 +77,6 @@ class BaseBot:
             raise InvalidSession("Failed to get TG Web Data")
 
     async def check_and_update_proxy(self, accounts_config: dict) -> bool:
-        """
-        Проверка и обновление прокси при необходимости.
-        
-        Args:
-            accounts_config: Конфигурация аккаунтов
-            
-        Returns:
-            bool: Успешность операции
-        """
         if not settings.USE_PROXY:
             return True
 
@@ -133,12 +96,6 @@ class BaseBot:
         return True
 
     async def initialize_session(self) -> bool:
-        """
-        Инициализация сессии и проверка первого запуска.
-        
-        Returns:
-            bool: Успешность инициализации
-        """
         try:
             self._is_first_run = await check_is_first_run(self.session_name)
             if self._is_first_run:
@@ -150,17 +107,6 @@ class BaseBot:
             return False
 
     async def make_request(self, method: str, url: str, **kwargs) -> Optional[Dict]:
-        """
-        Выполнение HTTP-запроса с поддержкой прокси и обработкой ошибок.
-        
-        Args:
-            method: HTTP метод
-            url: URL для запроса
-            **kwargs: Дополнительные параметры запроса
-            
-        Returns:
-            Optional[Dict]: Ответ сервера или None в случае ошибки
-        """
         if not self._http_client:
             raise InvalidSession("HTTP client not initialized")
 
@@ -175,9 +121,6 @@ class BaseBot:
             return None
 
     async def run(self) -> None:
-        """
-        Основной цикл работы бота.
-        """
         if not await self.initialize_session():
             return
 
@@ -197,7 +140,6 @@ class BaseBot:
                         await asyncio.sleep(300)
                         continue
 
-                    # Здесь размещается основная логика бота
                     await self.process_bot_logic()
                     
                 except InvalidSession as e:
@@ -208,36 +150,26 @@ class BaseBot:
                     await asyncio.sleep(sleep_duration)
 
     async def process_bot_logic(self) -> None:
-        """Основная логика работы бота."""
         try:
-            # Инициализация авторизации
             if not hasattr(self, '_auth_header'):
                 self._auth_header = None
                 self._base_url = "https://miniapp.theopencoin.xyz/api/v1"
                 self._current_block_id = None
                 self._after_block_id = None
             
-            # Получение заголовков
             if not self._auth_header:
                 tg_web_data = await self.get_tg_web_data()
-                self._auth_header = f"tma {tg_web_data}"
+                self._auth_header = tg_web_data
             
-            headers = {
-                "accept": "*/*",
-                "authorization": self._auth_header,
-                "content-type": "application/json",
-                "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-            }
+            headers = get_toc_headers(self._auth_header)
 
             while True:
-                # Ждем начала следующей минуты
                 now = datetime.now()
                 wait_seconds = 60 - now.second
                 if wait_seconds <= 0:
                     wait_seconds = 60
                 await asyncio.sleep(wait_seconds)
                 
-                # Добавляем случайную задержку 3-6 секунд
                 await asyncio.sleep(uniform(3, 6))
             
                 # Проверяем текущий пул
@@ -247,8 +179,16 @@ class BaseBot:
                     headers=headers
                 )
                 
-                if not user_pool or all(user_pool.get(k) is None for k in ('id', 'title')):
-                    # Получаем список доступных пулов
+                # Ищем новый пул только если у нас его нет (все значения null)
+                if user_pool and user_pool.get('id') is not None:
+                    pool_info = (
+                        f"Pool: {user_pool.get('title')} | "
+                        f"Fee: {user_pool.get('fee_percentage')}% | "
+                        f"Miners: {user_pool.get('number_of_miners')} | "
+                        f"Mined: {user_pool.get('tokens_mined', 0)}"
+                    )
+                    logger.info(f"⛏️ {self.session_name} | {pool_info}")
+                else:
                     pools = await self.make_request(
                         "GET",
                         f"{self._base_url}/pools",
@@ -256,7 +196,6 @@ class BaseBot:
                     )
                     
                     if pools:
-                        # Сортируем пулы по критериям
                         best_pool = None
                         max_score = -1
                         
@@ -265,10 +204,9 @@ class BaseBot:
                             tokens = pool.get('tokensMined', 0)
                             fee = pool.get('feePercentage', 100)
                             
-                            if members >= 40:  # Пропускаем заполненные пулы
+                            if members >= 40:
                                 continue
                                 
-                            # Считаем score: больше токенов лучше, меньше комиссия лучше
                             score = tokens * (100 - fee)
                             
                             if score > max_score:
@@ -276,7 +214,6 @@ class BaseBot:
                                 best_pool = pool
                         
                         if best_pool:
-                            # Присоединяемся к лучшему пулу
                             join_result = await self.make_request(
                                 "POST",
                                 f"{self._base_url}/pools/join-invoice",
@@ -295,7 +232,6 @@ class BaseBot:
                                     f"Mined: {best_pool['tokensMined']})"
                                 )
             
-                # Получаем статистику пользователя
                 stats = await self.make_request(
                     "GET", 
                     f"{self._base_url}/users/stats",
@@ -320,7 +256,6 @@ class BaseBot:
                     
                     # Если включена подписка на каналы и не подписаны на сообщество
                     if settings.SUBSCRIBE_TELEGRAM and not has_joined_community:
-                        # Подписываемся на канал
                         await self.tg_client.join_telegram_channel({
                             "additional_data": {
                                 "username": settings.COMMUNITY_CHANNEL
@@ -328,7 +263,6 @@ class BaseBot:
                         })
                         await asyncio.sleep(2)
                         
-                        # Проверяем подписку
                         check_community = await self.make_request(
                             "GET",
                             f"{self._base_url}/users/check-community",
@@ -337,14 +271,15 @@ class BaseBot:
                         if check_community and check_community.get('hasJoinedCommunity'):
                             logger.info(f"📢 {self.session_name} | Community subscription confirmed")
                     
-                    logger.info(
-                        f"⛏️ {self.session_name} | "
-                        f"Mined: {tokens_mined:.6f} OPEN | "
-                        f"Luck: {luck_factor} | "
-                        f"Refs: {ref_count} 👥"
-                    )
+                    # Выводим статистику только если не выводили информацию о пуле
+                    if not user_pool or user_pool.get('id') is None:
+                        logger.info(
+                            f"⛏️ {self.session_name} | "
+                            f"Mined: {tokens_mined:.6f} OPEN | "
+                            f"Luck: {luck_factor} | "
+                            f"Refs: {ref_count} 👥"
+                        )
 
-                # Получаем информацию о последнем блоке
                 latest_block = await self.make_request(
                     "GET",
                     f"{self._base_url}/blocks/latest",
@@ -360,7 +295,6 @@ class BaseBot:
                 if not self._after_block_id:
                     self._after_block_id = self._current_block_id - 1
 
-                # Если не майним, начинаем майнинг
                 if not latest_block.get("isUserMining", False):
                     result = await self.make_request(
                         "POST",
@@ -376,7 +310,6 @@ class BaseBot:
                             f"with {miners_count} miners"
                         )
 
-                # Проверяем результаты
                 results = await self.make_request(
                     "GET",
                     f"{self._base_url}/blocks/user-results?afterBlockId={self._after_block_id}&currentBlockId={self._current_block_id}",
@@ -400,12 +333,6 @@ class BaseBot:
 
 
 async def run_tapper(tg_client: UniversalTelegramClient):
-    """
-    Функция для запуска бота.
-    
-    Args:
-        tg_client: Клиент Telegram
-    """
     bot = BaseBot(tg_client=tg_client)
     try:
         await bot.run()
