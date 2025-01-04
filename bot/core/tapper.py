@@ -245,189 +245,166 @@ class BaseBot:
                 self._last_auth_time = current_time
             
             headers = get_toc_headers(self._auth_header)
-            
             await self.check_and_vote_proposals(headers)
 
             while True:
-                now = datetime.now()
-                wait_seconds = 60 - now.second
-                if wait_seconds <= 0:
-                    wait_seconds = 60
-                await asyncio.sleep(wait_seconds)
+                try:
+                    now = datetime.now()
+                    wait_seconds = 60 - now.second
+                    if wait_seconds <= 0:
+                        wait_seconds = 60
+                    await asyncio.sleep(wait_seconds)
+                    
+                    await asyncio.sleep(uniform(3, 6))
                 
-                await asyncio.sleep(uniform(3, 6))
-            
-                user_pool = await self.make_request(
-                    "GET",
-                    f"{self._base_url}/pools/user-pool",
-                    headers=headers
-                )
-                
-                if user_pool and user_pool.get('id') is not None:
-                    pool_info = (
-                        f"Pool: {user_pool.get('title')} | "
-                        f"Fee: {user_pool.get('fee_percentage')}% | "
-                        f"Miners: {user_pool.get('number_of_miners')} | "
-                        f"Mined: {user_pool.get('tokens_mined', 0)}"
+                    user_pool = await self.make_request(
+                        "GET",
+                        f"{self._base_url}/pools/user-pool",
+                        headers=headers
                     )
-                    logger.info(f"⛏️ {self.session_name} | {pool_info}")
+                    
+                    if user_pool and user_pool.get('id') is not None:
+                        pool_info = (
+                            f"Pool: {user_pool.get('title')} | "
+                            f"Fee: {user_pool.get('fee_percentage')}% | "
+                            f"Miners: {user_pool.get('number_of_miners')} | "
+                            f"Mined: {user_pool.get('tokens_mined', 0)}"
+                        )
+                        logger.info(f"⛏️ {self.session_name} | {pool_info}")
+                        
+                        if not settings.JOIN_POOLS:
+                            continue
+                        
+                        current_members = user_pool.get('number_of_miners', 0)
+                        current_fee = user_pool.get('fee_percentage', 100)
+                        
+                        if current_members >= settings.MAX_POOL_MINERS or current_fee > settings.MAX_POOL_FEE:
+                            logger.info(f"🔄 {self.session_name} | Looking for a better pool...")
+                        else:
+                            continue
                     
                     if not settings.JOIN_POOLS:
                         continue
                     
-                    # Проверяем, стоит ли оставаться в текущем пуле
-                    current_members = user_pool.get('number_of_miners', 0)
-                    current_fee = user_pool.get('fee_percentage', 100)
-                    
-                    if current_members >= settings.MAX_POOL_MINERS or current_fee > settings.MAX_POOL_FEE:
-                        logger.info(f"🔄 {self.session_name} | Looking for a better pool...")
-                    else:
-                        continue
-                
-                if not settings.JOIN_POOLS:
-                    continue
-                
-                pools = await self.make_request(
-                    "GET",
-                    f"{self._base_url}/pools",
-                    headers=headers
-                )
-                
-                if pools:
-                    best_pool = None
-                    max_score = -1
-                    
-                    for pool in pools:
-                        members = pool.get('numberOfMembers', 0)
-                        tokens = pool.get('tokensMined', 0)
-                        fee = pool.get('feePercentage', 100)
-                        
-                        if members >= settings.MAX_POOL_MINERS or fee > settings.MAX_POOL_FEE:
-                            continue
-                            
-                        # Предпочитаем пулы с меньшим количеством майнеров
-                        member_factor = 1 - (members / settings.MAX_POOL_MINERS)
-                        # Учитываем и намайненные токены, и комиссию
-                        score = (tokens + 1) * (100 - fee) * member_factor
-                        
-                        if score > max_score:
-                            max_score = score
-                            best_pool = pool
-                    
-                    if best_pool:
-                        join_result = await self.make_request(
-                            "POST",
-                            f"{self._base_url}/pools/join-invoice",
-                            headers=headers,
-                            json={
-                                "miningPoolId": str(best_pool['id']),
-                                "poolName": best_pool['title']
-                            }
-                        )
-                        if join_result:
-                            logger.info(
-                                f"⭐ {self.session_name} | "
-                                f"Joined pool {best_pool['title']} "
-                                f"(Fee: {best_pool['feePercentage']}%, "
-                                f"Miners: {best_pool['numberOfMembers']}, "
-                                f"Mined: {best_pool['tokensMined']})"
-                            )
-            
-                stats = await self.make_request(
-                    "GET", 
-                    f"{self._base_url}/users/stats",
-                    headers=headers
-                )
-                if stats:
-                    tokens_mined = stats.get('tokensMined', 0)
-                    ref_count = stats.get('numberOfReferrals', 0)
-                    luck_factor = stats.get('luckFactor', 1)
-                    has_joined_x = stats.get('hasJoinedX', False)
-                    has_joined_community = stats.get('hasJoinedCommunity', False)
-                    
-                    if not has_joined_x:
-                        check_x = await self.make_request(
-                            "GET",
-                            f"{self._base_url}/users/check-x",
-                            headers=headers
-                        )
-                        if check_x and check_x.get('hasJoinedX'):
-                            logger.info(f"🎯 {self.session_name} | Twitter subscription confirmed")
-                    
-                    if settings.SUBSCRIBE_TELEGRAM and not has_joined_community:
-                        await self.tg_client.join_telegram_channel({
-                            "additional_data": {
-                                "username": settings.COMMUNITY_CHANNEL
-                            }
-                        })
-                        await asyncio.sleep(2)
-                        
-                        check_community = await self.make_request(
-                            "GET",
-                            f"{self._base_url}/users/check-community",
-                            headers=headers
-                        )
-                        if check_community and check_community.get('hasJoinedCommunity'):
-                            logger.info(f"📢 {self.session_name} | Community subscription confirmed")
-                    
-                    if not user_pool or user_pool.get('id') is None:
-                        logger.info(
-                            f"⛏️ {self.session_name} | "
-                            f"Mined: {tokens_mined:.6f} OPEN | "
-                            f"Luck: {luck_factor} | "
-                            f"Refs: {ref_count} 👥"
-                        )
-
-                latest_block = await self.make_request(
-                    "GET",
-                    f"{self._base_url}/blocks/latest",
-                    headers=headers
-                )
-                if not latest_block:
-                    continue
-
-                self._current_block_id = latest_block.get("id")
-                if not self._current_block_id:
-                    continue
-
-                if not self._after_block_id:
-                    self._after_block_id = self._current_block_id - 1
-
-                if not latest_block.get("isUserMining", False):
-                    result = await self.make_request(
-                        "POST",
-                        f"{self._base_url}/blocks/start-mining",
-                        headers=headers,
-                        json={"blockId": self._current_block_id}
+                    pools = await self.make_request(
+                        "GET",
+                        f"{self._base_url}/pools",
+                        headers=headers
                     )
-                    if result is not None:
-                        miners_count = latest_block.get('minersCount', 0)
-                        logger.info(
-                            f"🚀 {self.session_name} | "
-                            f"Started mining block {self._current_block_id} "
-                            f"with {miners_count} miners"
-                        )
-
-                results = await self.make_request(
-                    "GET",
-                    f"{self._base_url}/blocks/user-results?afterBlockId={self._after_block_id}&currentBlockId={self._current_block_id}",
-                    headers=headers
-                ) or []
-                
-                for result in results:
-                    if isinstance(result, dict):
-                        rewards = result.get('rewards', 0)
-                        block_id = result.get('block_id')
-                        if block_id:
-                            logger.info(
-                                f"💎 {self.session_name} | "
-                                f"Got {rewards:.6f} OPEN "
-                                f"from block {block_id}"
+                    
+                    if pools:
+                        best_pool = None
+                        max_score = -1
+                        
+                        for pool in pools:
+                            members = pool.get('numberOfMembers', 0)
+                            tokens = pool.get('tokensMined', 0)
+                            fee = pool.get('feePercentage', 100)
+                            
+                            if members >= settings.MAX_POOL_MINERS or fee > settings.MAX_POOL_FEE:
+                                continue
+                                
+                            member_factor = 1 - (members / settings.MAX_POOL_MINERS)
+                            score = (tokens + 1) * (100 - fee) * member_factor
+                            
+                            if score > max_score:
+                                max_score = score
+                                best_pool = pool
+                        
+                        if best_pool:
+                            join_result = await self.make_request(
+                                "POST",
+                                f"{self._base_url}/pools/join-invoice",
+                                headers=headers,
+                                json={
+                                    "miningPoolId": str(best_pool['id']),
+                                    "poolName": best_pool['title']
+                                }
                             )
-                            self._after_block_id = max(self._after_block_id, int(block_id))
+                            if join_result:
+                                logger.info(
+                                    f"⭐ {self.session_name} | "
+                                    f"Joined pool {best_pool['title']} "
+                                    f"(Fee: {best_pool['feePercentage']}%, "
+                                    f"Miners: {best_pool['numberOfMembers']}, "
+                                    f"Mined: {best_pool['tokensMined']})"
+                                )
+                
+                    stats = await self.make_request(
+                        "GET", 
+                        f"{self._base_url}/users/stats",
+                        headers=headers
+                    )
+                    if stats:
+                        tokens_mined = stats.get('tokensMined', 0)
+                        ref_count = stats.get('numberOfReferrals', 0)
+                        luck_factor = stats.get('luckFactor', 1)
+                        has_joined_x = stats.get('hasJoinedX', False)
+                        has_joined_community = stats.get('hasJoinedCommunity', False)
+                        
+                        if not user_pool or user_pool.get('id') is None:
+                            logger.info(
+                                f"⛏️ {self.session_name} | "
+                                f"Mined: {tokens_mined:.6f} OPEN | "
+                                f"Luck: {luck_factor} | "
+                                f"Refs: {ref_count} 👥"
+                            )
 
+                    latest_block = await self.make_request(
+                        "GET",
+                        f"{self._base_url}/blocks/latest",
+                        headers=headers
+                    )
+                    if not latest_block:
+                        continue
+
+                    self._current_block_id = latest_block.get("id")
+                    if not self._current_block_id:
+                        continue
+
+                    if not self._after_block_id:
+                        self._after_block_id = self._current_block_id - 1
+
+                    if not latest_block.get("isUserMining", False):
+                        result = await self.make_request(
+                            "POST",
+                            f"{self._base_url}/blocks/start-mining",
+                            headers=headers,
+                            json={"blockId": self._current_block_id}
+                        )
+                        if result is not None:
+                            miners_count = latest_block.get('minersCount', 0)
+                            logger.info(
+                                f"🚀 {self.session_name} | "
+                                f"Started mining block {self._current_block_id} "
+                                f"with {miners_count} miners"
+                            )
+
+                    results = await self.make_request(
+                        "GET",
+                        f"{self._base_url}/blocks/user-results?afterBlockId={self._after_block_id}&currentBlockId={self._current_block_id}",
+                        headers=headers
+                    ) or []
+                    
+                    for result in results:
+                        if isinstance(result, dict):
+                            rewards = result.get('rewards', 0)
+                            block_id = result.get('block_id')
+                            if block_id:
+                                logger.info(
+                                    f"💎 {self.session_name} | "
+                                    f"Got {rewards:.6f} OPEN "
+                                    f"from block {block_id}"
+                                )
+                                self._after_block_id = max(self._after_block_id, int(block_id))
+                except Exception as e:
+                    logger.error(f"❌ {self.session_name} | Mining cycle error: {str(e)}")
+                    await asyncio.sleep(5)
+                    continue
+                    
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Mining error: {str(e)}")
+            raise
 
 
 async def run_tapper(tg_client: UniversalTelegramClient):
