@@ -45,8 +45,8 @@ class UniversalTelegramClient:
     def _init_client(self):
         try:
             self.client = TelegramClient(connection=ConnectionTcpAbridged, **self._client_params)
-            self.client.parse_mode = None  # Отключаем парсинг сообщений
-            self.client.no_updates = True  # Отключаем обновления
+            self.client.parse_mode = None
+            self.client.no_updates = True
             self.is_pyrogram = False
             self.session_name, _ = os.path.splitext(os.path.basename(self.client.session.filename))
         except OperationalError:
@@ -54,11 +54,8 @@ class UniversalTelegramClient:
             self._client_params.pop('system_lang_code')
             self._client_params['name'] = session_name
             self.client = PyrogramClient(**self._client_params)
-            
-            # Отключаем обработку обновлений для Pyrogram клиента
             self.client.no_updates = True
             self.client.run = lambda *args, **kwargs: None
-            
             self.is_pyrogram = True
             self.session_name, _ = os.path.splitext(os.path.basename(self.client.name))
 
@@ -198,13 +195,20 @@ class UniversalTelegramClient:
             while True:
                 try:
                     peer = await self.client.resolve_peer(bot_username)
+                    if not peer:
+                        raise Exception("Failed to resolve peer")
+                        
                     input_bot_app = ptypes.InputBotAppShortName(bot_id=peer, short_name=bot_shortname)
                     self._webview_data = {'peer': peer, 'app': input_bot_app} if bot_shortname \
                         else {'peer': peer, 'bot': peer}
                     return
+                    
                 except FloodWait as fl:
                     logger.warning(f"<ly>{self.session_name}</ly> | FloodWait {fl}. Waiting {fl.value}s")
                     await asyncio.sleep(fl.value + 3)
+                except Exception as e:
+                    logger.error(f"❌ {self.session_name} | Error initializing web view data: {str(e)}")
+                    raise
 
     async def _pyrogram_get_app_webview_url(self, bot_username: str, bot_shortname: str, default_val: str) -> str:
         if self.proxy and not self.client.proxy:
@@ -215,34 +219,59 @@ class UniversalTelegramClient:
             try:
                 if not self.client.is_connected:
                     await self.client.connect()
-                await self._pyrogram_initialize_webview_data(bot_username, bot_shortname)
-                await asyncio.sleep(uniform(1, 2))
-
-                ref_id = default_val
-                start = {'start_param': ref_id}
                 
-                web_view = await self.client.invoke(pmessages.RequestAppWebView(
+                await self._pyrogram_initialize_webview_data(bot_username)
+                await asyncio.sleep(uniform(1, 2))
+                
+                start_param = default_val
+                start = {'start_param': start_param}
+
+                start_state = False
+                try:
+                    async for message in self.client.get_chat_history(bot_username):
+                        if message and message.text and r'/start' in message.text:
+                            start_state = True
+                            break
+                except Exception as e:
+                    start_state = False
+                
+                await asyncio.sleep(uniform(0.5, 1))
+                
+                if not start_state:
+                    try:
+                        await self.client.invoke(pmessages.StartBot(
+                            **self._webview_data,
+                            random_id=randint(1, 2**63),
+                            start_param=start_param
+                        ))
+                    except Exception as e:
+                        logger.error(f"❌ {self.session_name} | Failed to send start command: {str(e)}")
+                        raise
+                
+                await asyncio.sleep(uniform(1, 2))
+                
+                web_view = await self.client.invoke(pmessages.RequestWebView(
                     **self._webview_data,
                     platform='android',
-                    write_allowed=True,
+                    from_bot_menu=False,
+                    url=bot_shortname,
                     **start
                 ))
-
-                url = web_view.url
                 
-                if 'tgWebAppStartParam=' not in url:
-                    separator = '?' if '#' in url else '&#'
-                    insert_pos = url.find('#') if '#' in url else len(url)
-                    url = f"{url[:insert_pos]}{separator}tgWebAppStartParam={ref_id}{url[insert_pos:]}"
-
-                return url
+                if not web_view:
+                    logger.error(f"❌ {self.session_name} | Web view request returned None")
+                    return None
+                
+                return web_view.url
 
             except (Unauthorized, AuthKeyUnregistered):
+                logger.error(f"❌ {self.session_name} | User is unauthorized")
                 raise InvalidSession(f"{self.session_name}: User is unauthorized")
             except (UserDeactivated, UserDeactivatedBan, PhoneNumberBanned):
+                logger.error(f"❌ {self.session_name} | User is banned")
                 raise InvalidSession(f"{self.session_name}: User is banned")
-
-            except Exception:
+            except Exception as e:
+                logger.error(f"❌ {self.session_name} | Error in get_webview_url: {str(e)}")
                 raise
 
             finally:
@@ -259,27 +288,37 @@ class UniversalTelegramClient:
             try:
                 if not self.client.is_connected:
                     await self.client.connect()
+                
                 await self._pyrogram_initialize_webview_data(bot_username)
                 await asyncio.sleep(uniform(1, 2))
-
-                # Всегда используем default_val как start_param
+                
                 start_param = default_val
                 start = {'start_param': start_param}
 
                 start_state = False
-                async for message in self.client.get_chat_history(bot_username):
-                    if r'/start' in message.text:
-                        start_state = True
-                        break
+                try:
+                    async for message in self.client.get_chat_history(bot_username):
+                        if message and message.text and r'/start' in message.text:
+                            start_state = True
+                            break
+                except Exception as e:
+                    start_state = False
+                
                 await asyncio.sleep(uniform(0.5, 1))
                 
                 if not start_state:
-                    await self.client.invoke(pmessages.StartBot(
-                        **self._webview_data,
-                        random_id=randint(1, 2**63),
-                        start_param=start_param
-                    ))
+                    try:
+                        await self.client.invoke(pmessages.StartBot(
+                            **self._webview_data,
+                            random_id=randint(1, 2**63),
+                            start_param=start_param
+                        ))
+                    except Exception as e:
+                        logger.error(f"❌ {self.session_name} | Failed to send start command: {str(e)}")
+                        raise
+                
                 await asyncio.sleep(uniform(1, 2))
+                
                 web_view = await self.client.invoke(pmessages.RequestWebView(
                     **self._webview_data,
                     platform='android',
@@ -287,15 +326,21 @@ class UniversalTelegramClient:
                     url=bot_url,
                     **start
                 ))
-
+                
+                if not web_view:
+                    logger.error(f"❌ {self.session_name} | Web view request returned None")
+                    return None
+                
                 return web_view.url
 
             except (Unauthorized, AuthKeyUnregistered):
+                logger.error(f"❌ {self.session_name} | User is unauthorized")
                 raise InvalidSession(f"{self.session_name}: User is unauthorized")
             except (UserDeactivated, UserDeactivatedBan, PhoneNumberBanned):
+                logger.error(f"❌ {self.session_name} | User is banned")
                 raise InvalidSession(f"{self.session_name}: User is banned")
-
-            except Exception:
+            except Exception as e:
+                logger.error(f"❌ {self.session_name} | Error in get_webview_url: {str(e)}")
                 raise
 
             finally:
@@ -428,14 +473,6 @@ class UniversalTelegramClient:
         return self.ref_id
 
     async def join_telegram_channel(self, channel_data: dict) -> bool:
-        """Универсальный метод для подписки на Telegram-каналы.
-        
-        Args:
-            channel_data: Словарь с данными канала, содержащий username
-            
-        Returns:
-            bool: True если подписка успешна, False в противном случае
-        """
         if not settings.SUBSCRIBE_TELEGRAM:
             logger.warning(f"{self.session_name} | Channel subscriptions are disabled in settings")
             return False
@@ -494,7 +531,6 @@ class UniversalTelegramClient:
         return False
 
     async def _telethon_mute_and_archive_channel(self, channel_id: int) -> None:
-        """Отключение уведомлений и архивация канала для Telethon."""
         try:
             await self.client(account.UpdateNotifySettingsRequest(
                 peer=InputNotifyPeer(
@@ -520,7 +556,6 @@ class UniversalTelegramClient:
             logger.warning(f"{self.session_name} | Error while configuring channel: {str(e)}")
 
     async def _pyrogram_mute_and_archive_channel(self, channel_id: int) -> None:
-        """Отключение уведомлений и архивация канала для Pyrogram."""
         try:
             peer = await self.client.resolve_peer(channel_id)
             

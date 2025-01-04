@@ -36,7 +36,7 @@ class BaseBot:
         self._init_data: Optional[str] = None
         self._current_ref_id: Optional[str] = None
         self._last_auth_time: Optional[float] = None
-        self._auth_interval: int = 3600  # 1 час
+        self._auth_interval: int = 3600
         
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
@@ -65,17 +65,23 @@ class BaseBot:
             )
             
             if not webview_url:
+                logger.error(f"❌ {self.session_name} | Failed to get webview URL: URL is None")
                 raise InvalidSession("Failed to get webview URL")
-                
-            tg_web_data = unquote(
-                string=webview_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]
-            )
             
-            self._init_data = tg_web_data
-            return tg_web_data
+            try:
+                tg_web_data = webview_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]
+                tg_web_data = unquote(string=tg_web_data)
+                self._init_data = tg_web_data
+                return tg_web_data
+                
+            except (IndexError, AttributeError) as e:
+                logger.error(f"❌ {self.session_name} | Failed to parse webview URL: {str(e)}")
+                raise InvalidSession("Failed to parse webview URL")
             
         except Exception as e:
-            logger.error(f"Error getting TG Web Data: {str(e)}")
+            logger.error(f"❌ {self.session_name} | Error getting TG Web Data: {str(e)}")
+            if isinstance(e, InvalidSession):
+                raise
             raise InvalidSession("Failed to get TG Web Data")
 
     async def check_and_update_proxy(self, accounts_config: dict) -> bool:
@@ -122,7 +128,6 @@ class BaseBot:
                     if response.status == 200:
                         return await response.json()
                     elif response.status == 500:
-                        # Для 500 ошибок делаем повторные попытки без логирования
                         if attempt < max_retries - 1:
                             await asyncio.sleep(retry_delay * (attempt + 1))
                             continue
@@ -180,7 +185,6 @@ class BaseBot:
             
             current_time = time()
             
-            # Обновляем токен если прошел час или его нет
             if not self._auth_header or not self._last_auth_time or (current_time - self._last_auth_time) >= self._auth_interval:
                 tg_web_data = await self.get_tg_web_data()
                 self._auth_header = tg_web_data
@@ -197,14 +201,12 @@ class BaseBot:
                 
                 await asyncio.sleep(uniform(3, 6))
             
-                # Проверяем текущий пул
                 user_pool = await self.make_request(
                     "GET",
                     f"{self._base_url}/pools/user-pool",
                     headers=headers
                 )
                 
-                # Ищем новый пул только если у нас его нет (все значения null)
                 if user_pool and user_pool.get('id') is not None:
                     pool_info = (
                         f"Pool: {user_pool.get('title')} | "
@@ -269,7 +271,6 @@ class BaseBot:
                     has_joined_x = stats.get('hasJoinedX', False)
                     has_joined_community = stats.get('hasJoinedCommunity', False)
                     
-                    # Если не подписаны на X, подтверждаем подписку
                     if not has_joined_x:
                         check_x = await self.make_request(
                             "GET",
@@ -279,7 +280,6 @@ class BaseBot:
                         if check_x and check_x.get('hasJoinedX'):
                             logger.info(f"🎯 {self.session_name} | Twitter subscription confirmed")
                     
-                    # Если включена подписка на каналы и не подписаны на сообщество
                     if settings.SUBSCRIBE_TELEGRAM and not has_joined_community:
                         await self.tg_client.join_telegram_channel({
                             "additional_data": {
@@ -296,7 +296,6 @@ class BaseBot:
                         if check_community and check_community.get('hasJoinedCommunity'):
                             logger.info(f"📢 {self.session_name} | Community subscription confirmed")
                     
-                    # Выводим статистику только если не выводили информацию о пуле
                     if not user_pool or user_pool.get('id') is None:
                         logger.info(
                             f"⛏️ {self.session_name} | "
