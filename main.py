@@ -33,6 +33,6 @@ async def main() -> None:
     await process()
 
 if __name__ == '__main__':
-    set_window_title('NAME')
+    set_window_title('TOC by @mffff4')
     with suppress(KeyboardInterrupt):
         asyncio.run(main())
