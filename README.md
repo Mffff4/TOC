@@ -25,7 +25,7 @@
 
 ---
 ## 💰 Free and Paid Versions
-| Functionality | Free Version | Paid Version |
+| Functionality | Free Version | [Paid Version](https://t.me/MaineMarketBot?start=01FNMXZP) |
 | --- | --- | --- |
 | Multithreading with accounts | ✅ | ✅ |
 | Support for HTTP/SOCKS5 proxies | ✅ | ✅ |
