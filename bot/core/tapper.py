@@ -259,7 +259,7 @@ class BaseBot:
                     wait_seconds = 60
                 await asyncio.sleep(wait_seconds)
                 
-                await asyncio.sleep(uniform(3, 6))
+                await asyncio.sleep(uniform(3, 38))
             
                 user_pool = await self.make_request(
                     "GET",
