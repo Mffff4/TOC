@@ -1,6 +1,6 @@
 services:
   bot:
-    container_name: 'BITAPP'
+    container_name: 'TOC'
     build:
       context: .
     stop_signal: SIGINT
