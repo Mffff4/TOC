@@ -239,6 +239,28 @@ class BaseBot:
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Voting error: {str(e)}")
 
+    async def check_vote_status(self, headers: Dict[str, str]) -> None:
+        try:
+            stats = await self.make_request(
+                "GET",
+                f"{self._base_url}/users/stats",
+                headers=headers
+            )
+            
+            if not stats or stats.get('hasVoted', True):
+                return
+                
+            check_vote = await self.make_request(
+                "GET",
+                f"{self._base_url}/users/check-voted",
+                headers=headers
+            )
+            
+            if check_vote and check_vote.get('hasVoted'):
+                logger.info(f"🗳️ {self.session_name} | Vote status confirmed")
+        except Exception as e:
+            logger.error(f"❌ {self.session_name} | Vote status check error: {str(e)}")
+
     async def process_bot_logic(self) -> None:
         try:
             if not hasattr(self, '_auth_header'):
@@ -257,6 +279,7 @@ class BaseBot:
             headers = get_toc_headers(self._auth_header)
             
             await self.vote_for_proposal(headers)
+            await self.check_vote_status(headers)
 
             while True:
                 now = datetime.now()
