@@ -242,22 +242,27 @@ class HashChecker:
 
     def _normalize_path(self, path: str) -> str:
         path = path.strip('/"\'')
+        path = path.strip()
+        
         if not path.startswith('/'):
             path = '/' + path
             
         path = path.split('?')[0]
         
         path = re.sub(r':\([^)]+\)', '', path)
-        path = re.sub(r',\(\)', '', path)
         path = re.sub(r'\([^)]*\)', '', path)
         path = re.sub(r':\w+', '', path)
-        path = re.sub(r',[^/]+', '', path)
+        path = re.sub(r',\s*\(\s*\)', '', path)
+        path = re.sub(r',\s*[^/,]+(?=[,)]|$)', '', path)
+        path = re.sub(r'\.[a-zA-Z]+\s*\([^)]*\)', '', path)
         
         path = re.sub(r'["\']', '', path)
         path = re.sub(r'\s+', '', path)
         path = re.sub(r',$', '', path)
         
         path = re.sub(r'/+', '/', path)
+        
+        path = re.sub(r'[^/a-zA-Z0-9_-]+', '', path)
         
         return path
 
@@ -302,71 +307,55 @@ class HashChecker:
         
         return sorted(list(params)) if params else None
 
+    def _is_valid_endpoint(self, path: str) -> bool:
+        if not path.startswith('/api/v1/'):
+            return False
+            
+        if any(x in path for x in ['(', ')', '.', ',', ':', 'fetch']):
+            return False
+            
+        if not re.match(r'^/api/v1/[a-zA-Z0-9/-]+$', path):
+            return False
+            
+        return True
+
     def _extract_endpoints(self, js_content: str) -> List[Endpoint]:
         endpoints = []
+        seen_endpoints = set()
         
-        for pattern in self._api_patterns:
-            for match in re.finditer(pattern, js_content):
-                path = match.group(0) if '/api/v1/' in match.group(0) else match.group(1)
-                if '/api/v1/' in path:
+        all_patterns = (
+            [(p, 'api') for p in self._api_patterns] +
+            [(p, 'vote') for p in self._vote_patterns] +
+            [(p, 'pool') for p in self._pool_patterns]
+        )
+        
+        for pattern, pattern_type in all_patterns:
+            for match in re.finditer(pattern, js_content, re.MULTILINE | re.DOTALL):
+                context = js_content[max(0, match.start() - 200):min(len(js_content), match.end() + 200)]
+                
+                if pattern_type == 'api':
+                    path = match.group(0) if '/api/v1/' in match.group(0) else match.group(1)
+                    paths = [path] if '/api/v1/' in path else []
+                else:
+                    paths = re.findall(r'["\']([^"\']*\/api\/v1\/[^"\']+)["\']', context)
+                
+                for path in paths:
                     path = self._normalize_path(path)
                     
-                    start_pos = js_content.find(path)
-                    while start_pos != -1:
-                        context = js_content[max(0, start_pos - 200):min(len(js_content), start_pos + len(path) + 200)]
-                        method = self._determine_method_from_context(context, path)
-                        params = self._extract_params_from_context(context, path)
+                    if not self._is_valid_endpoint(path):
+                        continue
                         
-                        endpoint = Endpoint(
+                    method = self._determine_method_from_context(context, path)
+                    params = self._extract_params_from_context(context, path)
+                    
+                    endpoint_key = f"{method}:{path}"
+                    if endpoint_key not in seen_endpoints:
+                        seen_endpoints.add(endpoint_key)
+                        endpoints.append(Endpoint(
                             path=path,
                             method=method,
                             required_params=params
-                        )
-                        
-                        if not any(e.path == path and e.method == method for e in endpoints):
-                            endpoints.append(endpoint)
-                        
-                        start_pos = js_content.find(path, start_pos + 1)
-        
-        for pattern in self._vote_patterns:
-            for match in re.finditer(pattern, js_content, re.MULTILINE | re.DOTALL):
-                context = js_content[max(0, match.start() - 200):min(len(js_content), match.end() + 200)]
-                
-                api_paths = re.findall(r'["\']([^"\']*\/api\/v1\/[^"\']+)["\']', context)
-                for path in api_paths:
-                    if '/api/v1/' in path:
-                        path = self._normalize_path(path)
-                        method = self._determine_method_from_context(context, path)
-                        params = self._extract_params_from_context(context, path)
-                        
-                        endpoint = Endpoint(
-                            path=path,
-                            method=method,
-                            required_params=params
-                        )
-                        
-                        if not any(e.path == path and e.method == method for e in endpoints):
-                            endpoints.append(endpoint)
-        
-        for pattern in self._pool_patterns:
-            for match in re.finditer(pattern, js_content, re.MULTILINE | re.DOTALL):
-                context = js_content[max(0, match.start() - 200):min(len(js_content), match.end() + 200)]
-                
-                api_paths = re.findall(r'["\']([^"\']*\/api\/v1\/[^"\']+)["\']', context)
-                for path in api_paths:
-                    if '/api/v1/' in path:
-                        path = self._normalize_path(path)
-                        method = self._determine_method_from_context(context, path)
-                        params = self._extract_params_from_context(context, path)
-                        
-                        endpoint = Endpoint(
-                            path=path,
-                            method=method,
-                            required_params=params
-                        )
-                        
-                        if not any(e.path == path and e.method == method for e in endpoints):
-                            endpoints.append(endpoint)
+                        ))
         
         endpoints.sort(key=lambda x: (x.method, x.path))
         return endpoints
