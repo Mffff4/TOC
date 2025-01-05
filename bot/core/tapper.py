@@ -129,6 +129,12 @@ class BaseBot:
                 async with getattr(self._http_client, method.lower())(url, **kwargs) as response:
                     if response.status == 200:
                         return await response.json()
+                    elif response.status == 409:
+                        response_json = await response.json()
+                        if isinstance(response_json, dict) and response_json.get('code') == 'capture_required':
+                            return response_json
+                        logger.error(f"Request conflict (409): {await response.text()}")
+                        return None
                     elif response.status == 500:
                         if attempt < max_retries - 1:
                             await asyncio.sleep(retry_delay * (attempt + 1))
@@ -386,6 +392,21 @@ class BaseBot:
                         headers=headers,
                         json={"blockId": self._current_block_id}
                     )
+                    
+                    if isinstance(result, dict) and result.get('code') == 'capture_required':
+                        capture_data = result.get('capture')
+                        if capture_data:
+                            if await self.verify_capture(headers, capture_data):
+                                result = await self.make_request(
+                                    "POST",
+                                    f"{self._base_url}/blocks/start-mining",
+                                    headers=headers,
+                                    json={"blockId": self._current_block_id}
+                                )
+                            else:
+                                logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
+                                continue
+                    
                     if result is not None:
                         miners_count = latest_block.get('minersCount', 0)
                         logger.info(
@@ -414,6 +435,40 @@ class BaseBot:
 
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Mining error: {str(e)}")
+
+    async def verify_capture(self, headers: Dict[str, str], capture_data: Dict[str, Any]) -> bool:
+        try:
+            capture_type = capture_data.get('type')
+            context = capture_data.get('context', {})
+            
+            if capture_type == 'SUMM_V1':
+                a = context.get('a', 0)
+                b = context.get('b', 0)
+                result = a + b
+                
+                verify_response = await self.make_request(
+                    "POST",
+                    f"{self._base_url}/captures/verify",
+                    headers=headers,
+                    json={
+                        "captureType": capture_type,
+                        "captureContext": {"c": result}
+                    }
+                )
+                
+                return verify_response is not None
+            else:
+                logger.error(
+                    f"❌ {self.session_name} | "
+                    f"New captcha type: {capture_type}. "
+                    f"Context: {context}"
+                )
+                logger.error("Please report this at t.me/mffff4")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ {self.session_name} | Captcha verification error: {str(e)}")
+            return False
 
 
 async def run_tapper(tg_client: UniversalTelegramClient):
