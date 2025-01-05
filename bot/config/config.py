@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     CHECK_UPDATE_INTERVAL: int = 300
     BLACKLISTED_SESSIONS: str = ""
 
-    DEBUG_HASH: bool = True
+    DEBUG_HASH: bool = False
 
     @property
     def blacklisted_sessions(self) -> List[str]:
