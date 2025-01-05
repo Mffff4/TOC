@@ -282,49 +282,8 @@ class BaseBot:
                     )
                     logger.info(f"⛏️ {self.session_name} | {pool_info}")
                 else:
-                    pools = await self.make_request(
-                        "GET",
-                        f"{self._base_url}/pools",
-                        headers=headers
-                    )
-                    
-                    if pools:
-                        best_pool = None
-                        max_score = -1
-                        
-                        for pool in pools:
-                            members = pool.get('numberOfMembers', 0)
-                            tokens = pool.get('tokensMined', 0)
-                            fee = pool.get('feePercentage', 100)
-                            
-                            if members >= 40:
-                                continue
-                                
-                            score = tokens * (100 - fee)
-                            
-                            if score > max_score:
-                                max_score = score
-                                best_pool = pool
-                        
-                        if best_pool:
-                            join_result = await self.make_request(
-                                "POST",
-                                f"{self._base_url}/pools/join-invoice",
-                                headers=headers,
-                                json={
-                                    "miningPoolId": str(best_pool['id']),
-                                    "poolName": best_pool['title']
-                                }
-                            )
-                            if join_result:
-                                logger.info(
-                                    f"⭐ {self.session_name} | "
-                                    f"Joined pool {best_pool['title']} "
-                                    f"(Fee: {best_pool['feePercentage']}%, "
-                                    f"Miners: {best_pool['numberOfMembers']}, "
-                                    f"Mined: {best_pool['tokensMined']})"
-                                )
-            
+                    logger.info(f"⛏️ {self.session_name} | Not in pool")
+
                 stats = await self.make_request(
                     "GET", 
                     f"{self._base_url}/users/stats",
@@ -405,7 +364,7 @@ class BaseBot:
                                 )
                             else:
                                 logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
-                                continue
+                                exit(1)
                     
                     if result is not None:
                         miners_count = latest_block.get('minersCount', 0)
@@ -453,6 +412,20 @@ class BaseBot:
                     json={
                         "captureType": capture_type,
                         "captureContext": {"c": result}
+                    }
+                )
+                
+                return verify_response is not None
+            elif capture_type == 'STARS_V1':
+                a = context.get('a', 0)
+                
+                verify_response = await self.make_request(
+                    "POST",
+                    f"{self._base_url}/captures/verify",
+                    headers=headers,
+                    json={
+                        "captureType": capture_type,
+                        "captureContext": {"a": a}
                     }
                 )
                 
