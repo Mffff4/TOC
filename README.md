@@ -31,7 +31,7 @@
 | Support for HTTP/SOCKS5 proxies | ✅ | ✅ |
 | Automatic completion of all tasks | ✅ | ✅ |
 | Automatic updates | ✅ | ✅ |
-| API change protection | ❌ | ✅ |
+| API change protection | ✅ | ✅ |
 | 100% referrals go to you | ❌ | ✅ |
 | Priority updates | ❌ | ✅ |
 | Personal Telegram bot for management | ❌ | ✅ |
@@ -111,6 +111,7 @@ the value ref_b2434667eb27d01f is the referral identifier.
 | **API_HASH**              |                      | Telegram API application hash                               |
 | **GLOBAL_CONFIG_PATH**    |                      | Path for configuration files. By default, uses the TG_FARM environment variable |
 | **FIX_CERT**              | False                | Fix SSL certificate errors                                  |
+| **CHECK_API_HASH**        | True                 | Check for API hash changes                                 |
 | **SESSION_START_DELAY**   | 360                  | Delay before starting the session (seconds)               |
 | **REF_ID**                |                      | Referral ID for new accounts                                |
 | **USE_PROXY**             | True                 | Use proxy                                                  |

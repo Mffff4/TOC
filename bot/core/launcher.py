@@ -16,12 +16,30 @@ from bot.utils import logger, config_utils, proxy_utils, CONFIG_PATH, SESSIONS_P
 from bot.core.tapper import run_tapper
 from bot.core.registrator import register_sessions
 from bot.utils.updater import UpdateManager
+from bot.utils.hash_checker import hash_checker
 
 init()
 shutdown_event = asyncio.Event()
 
 def signal_handler(signum: int, frame) -> None:
     shutdown_event.set()
+
+async def check_hashes_periodically() -> None:
+    while not shutdown_event.is_set():
+        try:
+            hash_match, _ = await hash_checker.check_hash()
+            if not hash_match:
+                logger.error(
+                    "\n❌ API endpoints have been updated. Stopping for safety.\n"
+                    "✉️ Contact https://t.me/mffff4 for assistance."
+                )
+                shutdown_event.set()
+                break
+            
+            await asyncio.sleep(60) 
+            
+        except Exception as e:
+            await asyncio.sleep(30)
 
 START_TEXT = f"""
 {Fore.RED}ВНИМАНИЕ: Эта ферма не предназначена для продажи!{Style.RESET_ALL}
@@ -195,6 +213,8 @@ async def run_tasks() -> None:
     
     tasks = []
     
+    tasks.append(asyncio.create_task(check_hashes_periodically()))
+    
     if settings.AUTO_UPDATE:
         update_manager = UpdateManager()
         tasks.append(asyncio.create_task(update_manager.run()))
@@ -203,8 +223,21 @@ async def run_tasks() -> None:
     tasks.extend([asyncio.create_task(run_tapper(tg_client=tg_client)) for tg_client in tg_clients])
 
     try:
-        await asyncio.gather(*tasks)
+        done, pending = await asyncio.wait(
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        for task in pending:
+            task.cancel()
+            
+        await asyncio.gather(*pending, return_exceptions=True)
+        
     except asyncio.CancelledError:
         for task in tasks:
             task.cancel()
         raise
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()

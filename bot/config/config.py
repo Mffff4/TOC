@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     GLOBAL_CONFIG_PATH: str = "TG_FARM"
 
     FIX_CERT: bool = False
-
+    CHECK_API_HASH: bool = True
     SESSION_START_DELAY: int = 360
 
     REF_ID: str = 'ref_b2434667eb27d01f'
@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     AUTO_UPDATE: bool = True
     CHECK_UPDATE_INTERVAL: int = 300
     BLACKLISTED_SESSIONS: str = ""
+
+    DEBUG_HASH: bool = False
 
     @property
     def blacklisted_sessions(self) -> List[str]:
