@@ -430,6 +430,38 @@ class BaseBot:
                 )
                 
                 return verify_response is not None
+            elif capture_type == 'MULTIPLY_V1':
+                a = context.get('a', 0)
+                b = context.get('b', 0)
+                result = a * b
+                
+                verify_response = await self.make_request(
+                    "POST",
+                    f"{self._base_url}/captures/verify",
+                    headers=headers,
+                    json={
+                        "captureType": capture_type,
+                        "captureContext": {"c": result}
+                    }
+                )
+                
+                return verify_response is not None
+            elif capture_type == 'SUBTRACT_V1':
+                a = context.get('a', 0)
+                b = context.get('b', 0)
+                result = a - b
+                
+                verify_response = await self.make_request(
+                    "POST",
+                    f"{self._base_url}/captures/verify",
+                    headers=headers,
+                    json={
+                        "captureType": capture_type,
+                        "captureContext": {"c": result}
+                    }
+                )
+                
+                return verify_response is not None
             else:
                 logger.error(
                     f"❌ {self.session_name} | "
