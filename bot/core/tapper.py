@@ -427,11 +427,29 @@ class BaseBot:
                         rewards = result.get('rewards', 0)
                         block_id = result.get('block_id')
                         if block_id:
+                            full_block_message = ""
+                            if rewards >= 31.25:
+                                if rewards >= 1000:
+                                    full_block_message = "🎯 PHASE 0: FULL BLOCK! 1000 TOC"
+                                elif rewards >= 500:
+                                    full_block_message = "🎯 PHASE 1: FULL BLOCK! 500 TOC"
+                                elif rewards >= 250:
+                                    full_block_message = "🎯 PHASE 2: FULL BLOCK! 250 TOC"
+                                elif rewards >= 125:
+                                    full_block_message = "🎯 PHASE 3: FULL BLOCK! 125 TOC"
+                                elif rewards >= 62.5:
+                                    full_block_message = "🎯 PHASE 4: FULL BLOCK! 62.5 TOC"
+                                elif rewards >= 31.25:
+                                    full_block_message = "🎯 PHASE 5: FULL BLOCK! 31.25 TOC"
+                            
                             logger.info(
                                 f"💎 {self.session_name} | "
                                 f"Got {rewards:.6f} OPEN "
                                 f"from block {block_id}"
                             )
+                            if full_block_message:
+                                logger.info(f"🎉 {self.session_name} | {full_block_message}")
+                            
                             self._after_block_id = max(self._after_block_id, int(block_id))
 
         except Exception as e:
