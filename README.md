@@ -123,7 +123,9 @@ the value ref_b2434667eb27d01f is the referral identifier.
 | **AUTO_UPDATE**           | True                 | Automatic updates                                           |
 | **CHECK_UPDATE_INTERVAL** | 300                  | Update check interval (seconds)                            |
 | **SUBSCRIBE_TELEGRAM_CHANNEL** | False                | Subscribe to the channel                                  |
-
+| **NIGHT_MODE** | False                | Night mode                                                  |
+| **NIGHT_TIME** | (0, 7)                | Night time (UTC)                                           |
+| **NIGHT_CHECKING** | (10800, 14400)         | Night checking interval (seconds)                         |
 
 ## 💰 Support and Donations
 

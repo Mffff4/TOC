@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     FIX_CERT: bool = False
     CHECK_API_HASH: bool = True
     SESSION_START_DELAY: int = 360
+    
+    NIGHT_MODE: bool = False
+    NIGHT_TIME: Tuple[int, int] = (0, 7)
+    NIGHT_CHECKING: Tuple[int, int] = (10800, 14400)
 
     REF_ID: str = 'ref_b2434667eb27d01f'
     SESSIONS_PER_PROXY: int = 1

@@ -7,7 +7,7 @@ from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from random import uniform, randint, choice
 from time import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 import json
 import os
 
@@ -157,16 +157,36 @@ class BaseBot:
         if not await self.initialize_session():
             return
 
-        random_delay = uniform(1, settings.SESSION_START_DELAY)
-        logger.info(f"Bot will start in {int(random_delay)}s")
-        await asyncio.sleep(random_delay)
+        delay = uniform(1, settings.SESSION_START_DELAY)
+        logger.info(f"{self.session_name} | Starting in {int(delay)} seconds")
+        await asyncio.sleep(delay)
+            
+        while True:
+            try:
+                if settings.NIGHT_MODE:
+                    current_utc_time = datetime.now(timezone.utc).time()
+                    logger.info(f"{self.session_name} | Checking night mode: Current UTC time is {current_utc_time.replace(microsecond=0)}")
 
-        proxy_conn = {'connector': ProxyConnector.from_url(self._current_proxy)} if self._current_proxy else {}
-        async with CloudflareScraper(timeout=aiohttp.ClientTimeout(60), **proxy_conn) as http_client:
-            self._http_client = http_client
+                    start_time = time(hour=settings.NIGHT_TIME[0], minute=settings.NIGHT_TIME[1])
+                    end_time = time(hour=7)
 
-            while True:
-                try:
+                    next_checking_time = randint(settings.NIGHT_CHECKING[0], settings.NIGHT_CHECKING[1])
+
+                    if start_time <= current_utc_time or current_utc_time <= end_time:
+                        logger.info(
+                            f"{self.session_name} | 😴 Night-Mode activated (sleep period: {start_time} - {end_time} UTC)"
+                            f"\n💤 Current UTC time: {current_utc_time.replace(microsecond=0)}"
+                            f"\n⏰ Next check in {round(next_checking_time / 3600, 1)} hours"
+                        )
+                        await asyncio.sleep(next_checking_time)
+                        continue
+                    else:
+                        logger.info(f"{self.session_name} | Night-Mode is off until {start_time} UTC")
+
+                proxy_conn = {'connector': ProxyConnector.from_url(self._current_proxy)} if self._current_proxy else {}
+                async with CloudflareScraper(timeout=aiohttp.ClientTimeout(60), **proxy_conn) as http_client:
+                    self._http_client = http_client
+
                     session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
                     if not await self.check_and_update_proxy(session_config):
                         logger.warning('Failed to find working proxy. Sleep 5 minutes.')
@@ -175,12 +195,12 @@ class BaseBot:
 
                     await self.process_bot_logic()
                     
-                except InvalidSession as e:
-                    raise
-                except Exception as error:
-                    sleep_duration = uniform(60, 120)
-                    logger.error(f"Unknown error: {error}. Sleeping for {int(sleep_duration)}")
-                    await asyncio.sleep(sleep_duration)
+            except InvalidSession as e:
+                raise
+            except Exception as error:
+                sleep_duration = uniform(60, 120)
+                logger.error(f"Unknown error: {error}. Sleeping for {int(sleep_duration)}")
+                await asyncio.sleep(sleep_duration)
 
     async def vote_for_proposal(self, headers: Dict[str, str]) -> None:
         try:
