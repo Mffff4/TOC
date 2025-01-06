@@ -364,13 +364,12 @@ class BaseBot:
                         if check_community and check_community.get('hasJoinedCommunity'):
                             logger.info(f"📢 {self.session_name} | Community subscription confirmed")
                     
-                    if not user_pool or user_pool.get('id') is None:
-                        logger.info(
-                            f"⛏️ {self.session_name} | "
-                            f"Mined: {tokens_mined:.6f} OPEN | "
-                            f"Luck: {luck_factor} | "
-                            f"Refs: {ref_count} 👥"
-                        )
+                    logger.info(
+                        f"⛏️ {self.session_name} | "
+                        f"Mined: {tokens_mined:.6f} OPEN | "
+                        f"Luck: {luck_factor} | "
+                        f"Refs: {ref_count} 👥"
+                    )
 
                 latest_block = await self.make_request(
                     "GET",
