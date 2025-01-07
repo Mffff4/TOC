@@ -54,7 +54,15 @@ START_TEXT = f"""
 {Fore.RED}ATENÇÃO: Esta fazenda não se destina à venda!{Style.RESET_ALL}
 
 {Fore.LIGHTMAGENTA_EX} 
-LOGO
+░▒▓████████▓▒░▒▓██████▓▒░ ░▒▓██████▓▒░  
+   ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
+   ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
+   ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
+   ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░        
+   ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
+   ░▒▓█▓▒░   ░▒▓██████▓▒░ ░▒▓██████▓▒░  
+                                        
+                                        
 {Style.RESET_ALL}
 {Fore.CYAN}Select action:{Style.RESET_ALL}
 
