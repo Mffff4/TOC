@@ -172,7 +172,13 @@ class BaseBot:
 
                     next_checking_time = randint(settings.NIGHT_CHECKING[0], settings.NIGHT_CHECKING[1])
 
-                    if start_time <= current_utc_time or current_utc_time <= end_time:
+                    is_sleep_time = False
+                    if start_time <= end_time:
+                        is_sleep_time = start_time <= current_utc_time <= end_time
+                    else: 
+                        is_sleep_time = current_utc_time >= start_time or current_utc_time <= end_time
+
+                    if is_sleep_time:
                         logger.info(
                             f"{self.session_name} | 😴 Night-Mode activated (sleep period: {start_time} - {end_time} UTC)"
                             f"\n💤 Current UTC time: {current_utc_time.replace(microsecond=0)}"
