@@ -372,9 +372,9 @@ class BaseBot:
                     
                     logger.info(
                         f"⛏️ {self.session_name} | "
-                        f"Mined: {tokens_mined:.6f} OPEN | "
-                        f"Luck: {luck_factor} | "
-                        f"Refs: {ref_count} 👥"
+                        f"Mined: {float(tokens_mined):.6f} OPEN | "
+                        f"Luck: {float(luck_factor)} | "
+                        f"Refs: {int(ref_count)} 👥"
                     )
 
                 latest_block = await self.make_request(
@@ -435,11 +435,11 @@ class BaseBot:
                         if block_id:
                             logger.info(
                                 f"💎 {self.session_name} | "
-                                f"Got {rewards:.6f} OPEN "
+                                f"Got {float(rewards):.6f} OPEN "
                                 f"from block {block_id}"
                             )
-                            if rewards >= 10:
-                                logger.info(f"🎯 {self.session_name} | 🎉 BIG WIN! {rewards:.6f} TOC")
+                            if rewards and float(rewards) >= 10:
+                                logger.info(f"🎯 {self.session_name} | 🎉 BIG WIN! {float(rewards):.6f} TOC")
                             
                             self._after_block_id = max(self._after_block_id, int(block_id))
 
