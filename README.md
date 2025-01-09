@@ -1,6 +1,6 @@
 # WebEmoji Bot
 
-[🇷🇺 Русский](README-RU.md) | [🇬🇧 English](README.md)
+[🇷🇺 Русский](README_RU.md) | [🇬🇧 English](README.md)
 
 [![Bot Link](https://img.shields.io/badge/Telegram_Bot-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/TheOpenCoin_bot?start=ref_b2434667eb27d01f)
 [![Channel Link](https://img.shields.io/badge/Telegram_Channel-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/+0ZTdqLZEVvk1ZTZi)
