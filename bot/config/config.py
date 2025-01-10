@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     FIX_CERT: bool = False
     CHECK_API_HASH: bool = True
-    SESSION_START_DELAY: int = 360
+    SESSION_START_DELAY: int = 1080
     
     NIGHT_MODE: bool = False
     NIGHT_TIME: Tuple[int, int] = (0, 7)
