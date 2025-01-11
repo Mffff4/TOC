@@ -589,3 +589,72 @@ class UniversalTelegramClient:
                 
         except Exception as e:
             logger.warning(f"{self.session_name} | Error while configuring channel: {str(e)}")
+
+    async def join_chat(self, chat_username: str) -> bool:
+        try:
+            if not chat_username.startswith('@'):
+                chat_username = f"@{chat_username}"
+
+            async with self.lock:
+                try:
+                    if self.is_pyrogram:
+                        if not self.client.is_connected:
+                            await self.client.connect()
+
+                        try:
+                            await self.client.join_chat(chat_username)
+                            logger.info(f"{self.session_name} | Successfully joined chat {chat_username}")
+
+                            chat = await self.client.get_chat(chat_username)
+                            peer = await self.client.resolve_peer(chat.id)
+
+                            await self.client.invoke(paccount.UpdateNotifySettings(
+                                peer=ptypes.InputNotifyPeer(peer=peer),
+                                settings=ptypes.InputPeerNotifySettings(
+                                    show_previews=False,
+                                    silent=True,
+                                    mute_until=2147483647
+                                )
+                            ))
+                            logger.info(f"{self.session_name} | Notifications disabled for chat {chat_username}")
+
+                            return True
+                        except Exception as e:
+                            logger.error(f"{self.session_name} | Error joining chat (Pyrogram): {str(e)}")
+                            return False
+                    else:
+                        if not self.client.is_connected():
+                            await self.client.connect()
+
+                        try:
+                            await self.client(channels.JoinChannelRequest(chat_username))
+                            logger.info(f"{self.session_name} | Successfully joined chat {chat_username}")
+
+                            entity = await self.client.get_entity(chat_username)
+                            await self.client(account.UpdateNotifySettingsRequest(
+                                peer=InputNotifyPeer(
+                                    peer=await self.client.get_input_entity(entity)
+                                ),
+                                settings=InputPeerNotifySettings(
+                                    show_previews=False,
+                                    silent=True,
+                                    mute_until=2147483647
+                                )
+                            ))
+                            logger.info(f"{self.session_name} | Notifications disabled for chat {chat_username}")
+
+                            return True
+                        except Exception as e:
+                            logger.error(f"{self.session_name} | Error joining chat (Telethon): {str(e)}")
+                            return False
+                finally:
+                    if self.is_pyrogram:
+                        if self.client.is_connected:
+                            await self.client.disconnect()
+                    else:
+                        if self.client.is_connected():
+                            await self.client.disconnect()
+
+        except Exception as e:
+            logger.error(f"{self.session_name} | General error joining chat: {str(e)}")
+            return False

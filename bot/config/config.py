@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     NIGHT_TIME: Tuple[int, int] = (0, 7)
     NIGHT_CHECKING: Tuple[int, int] = (10800, 14400)
 
+    BLOCKS_BEFORE_SLEEP: Tuple[int, int] = (1, 120)
+    SLEEP_HOURS: Tuple[int, int] = (2, 4)
+
     REF_ID: str = 'ref_b2434667eb27d01f'
     SESSIONS_PER_PROXY: int = 1
     USE_PROXY: bool = True

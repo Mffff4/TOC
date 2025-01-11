@@ -37,6 +37,8 @@ class BaseBot:
         self._current_ref_id: Optional[str] = None
         self._last_auth_time: Optional[float] = None
         self._auth_interval: int = 3600
+        self._mined_blocks_count: int = 0
+        self._target_blocks: Optional[int] = None
         
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
@@ -172,11 +174,15 @@ class BaseBot:
 
                     next_checking_time = randint(settings.NIGHT_CHECKING[0], settings.NIGHT_CHECKING[1])
 
+                    current_minutes = current_utc_time.hour * 60 + current_utc_time.minute
+                    start_minutes = start_time.hour * 60 + start_time.minute
+                    end_minutes = end_time.hour * 60 + end_time.minute
+
                     is_sleep_time = False
-                    if start_time <= end_time:
-                        is_sleep_time = start_time <= current_utc_time <= end_time
-                    else: 
-                        is_sleep_time = current_utc_time >= start_time or current_utc_time <= end_time
+                    if start_minutes <= end_minutes:
+                        is_sleep_time = start_minutes <= current_minutes <= end_minutes
+                    else:
+                        is_sleep_time = current_minutes >= start_minutes or current_minutes <= end_minutes
 
                     if is_sleep_time:
                         logger.info(
@@ -286,6 +292,39 @@ class BaseBot:
                 logger.info(f"🗳️ {self.session_name} | Vote status confirmed")
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Vote status check error: {str(e)}")
+   
+    async def check_and_join_telegram_chat(self, headers: Dict[str, str]) -> bool:
+        try:
+            chat_status = await self.make_request(
+                "GET",
+                f"{self._base_url}/users/check-chat",
+                headers=headers
+            )
+            
+            if not chat_status or chat_status.get("hasJoinedChat"):
+                return True
+                
+            chat_username = "theopencoin_chat"
+            try:
+                await self.tg_client.join_chat(chat_username)
+                logger.info(f"{self.session_name} | Successfully joined chat @{chat_username}")
+                
+                await asyncio.sleep(2)
+                verify_status = await self.make_request(
+                    "GET",
+                    f"{self._base_url}/users/check-chat",
+                    headers=headers
+                )
+                
+                return verify_status and verify_status.get("hasJoinedChat", False)
+                
+            except Exception as e:
+                logger.error(f"{self.session_name} | Error joining chat: {str(e)}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"{self.session_name} | Error checking chat status: {str(e)}")
+            return False
 
     async def process_bot_logic(self) -> None:
         try:
@@ -304,10 +343,40 @@ class BaseBot:
             
             headers = get_toc_headers(self._auth_header)
             
+            await self.check_and_join_telegram_chat(headers)
+            
             await self.vote_for_proposal(headers)
             await self.check_vote_status(headers)
 
             while True:
+                if not self._target_blocks and settings.BLOCKS_BEFORE_SLEEP != (0, 0):
+                    self._target_blocks = randint(
+                        settings.BLOCKS_BEFORE_SLEEP[0],
+                        settings.BLOCKS_BEFORE_SLEEP[1]
+                    )
+                    logger.info(
+                        f"🎲 {self.session_name} | "
+                        f"Target set: {self._target_blocks} blocks before sleep"
+                    )
+
+                if (settings.BLOCKS_BEFORE_SLEEP != (0, 0) and 
+                    self._target_blocks and 
+                    self._mined_blocks_count >= self._target_blocks):
+                    sleep_hours = uniform(settings.SLEEP_HOURS[0], settings.SLEEP_HOURS[1])
+                    sleep_seconds = int(sleep_hours * 3600)
+                    logger.info(
+                        f"😴 {self.session_name} | "
+                        f"Mined {self._mined_blocks_count} blocks. "
+                        f"Going to sleep for {sleep_hours:.1f} hours"
+                    )
+                    await asyncio.sleep(sleep_seconds)
+                    self._mined_blocks_count = 0
+                    self._target_blocks = None
+                    self._auth_header = None
+                    self._last_auth_time = None
+                    logger.info(f"🌅 {self.session_name} | Woke up! Restarting mining cycle")
+                    break
+
                 now = datetime.now()
                 wait_seconds = 60 - now.second
                 if wait_seconds <= 0:
@@ -339,9 +408,9 @@ class BaseBot:
                     headers=headers
                 )
                 if stats:
-                    tokens_mined = stats.get('tokensMined', 0)
-                    ref_count = stats.get('numberOfReferrals', 0)
-                    luck_factor = stats.get('luckFactor', 1)
+                    tokens_mined = stats.get('tokensMined', 0) or 0
+                    ref_count = stats.get('numberOfReferrals', 0) or 0
+                    luck_factor = stats.get('luckFactor', 1) or 1
                     has_joined_x = stats.get('hasJoinedX', False)
                     has_joined_community = stats.get('hasJoinedCommunity', False)
                     
@@ -430,13 +499,15 @@ class BaseBot:
                 
                 for result in results:
                     if isinstance(result, dict):
-                        rewards = result.get('rewards', 0)
+                        rewards = result.get('rewards', 0) or 0
                         block_id = result.get('block_id')
                         if block_id:
+                            self._mined_blocks_count += 1
                             logger.info(
                                 f"💎 {self.session_name} | "
                                 f"Got {float(rewards):.6f} OPEN "
-                                f"from block {block_id}"
+                                f"from block {block_id} "
+                                f"[{self._mined_blocks_count}/{self._target_blocks if self._target_blocks else '∞'}]"
                             )
                             if rewards and float(rewards) >= 10:
                                 logger.info(f"🎯 {self.session_name} | 🎉 BIG WIN! {float(rewards):.6f} TOC")

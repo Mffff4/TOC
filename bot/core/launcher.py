@@ -102,7 +102,7 @@ async def process() -> None:
     if not action and not args.update_restart:
         action = prompt_user_action()
 
-    if action == 1:
+    if action == 111:
         if not API_ID or not API_HASH:
             raise ValueError("API_ID and API_HASH not found in the .env file.")
         await run_tasks()
