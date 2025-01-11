@@ -19,6 +19,7 @@ from bot.utils import logger, config_utils, CONFIG_PATH
 from bot.exceptions import InvalidSession
 from bot.core.headers import get_toc_headers
 from bot.core.agents import generate_random_user_agent
+from bot.utils.captcha_solver import solve_captcha
 
 
 class BaseBot:
@@ -469,19 +470,30 @@ class BaseBot:
                         json={"blockId": self._current_block_id}
                     )
                     
-                    if isinstance(result, dict) and result.get('code') == 'capture_required':
-                        capture_data = result.get('capture')
-                        if capture_data:
-                            if await self.verify_capture(headers, capture_data):
-                                result = await self.make_request(
-                                    "POST",
-                                    f"{self._base_url}/blocks/start-mining",
-                                    headers=headers,
-                                    json={"blockId": self._current_block_id}
-                                )
-                            else:
-                                logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
-                                exit(1)
+                    if isinstance(result, dict):
+                        if result.get('code') == 'capture_required':
+                            capture_data = result.get('capture')
+                            if capture_data:
+                                if await self.verify_capture(headers, capture_data):
+                                    result = await self.make_request(
+                                        "POST",
+                                        f"{self._base_url}/blocks/start-mining",
+                                        headers=headers,
+                                        json={"blockId": self._current_block_id}
+                                    )
+                                else:
+                                    logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
+                                    exit(1)
+                        elif result.get('code') == 'user_blocked':
+                            block_minutes = int(result.get('message', '').split()[6])
+                            logger.warning(
+                                f"⛔️ {self.session_name} | User is blocked from mining for {block_minutes} minutes"
+                                f"\n💤 Going to sleep..."
+                            )
+                            await asyncio.sleep(block_minutes * 60)
+                            self._auth_header = None
+                            self._last_auth_time = None
+                            break
                     
                     if result is not None:
                         miners_count = latest_block.get('minersCount', 0)
@@ -517,73 +529,154 @@ class BaseBot:
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Mining error: {str(e)}")
 
-    async def verify_capture(self, headers: Dict[str, str], capture_data: Dict[str, Any]) -> bool:
+    async def verify_capture(self, headers: Dict[str, str], capture_data: Union[Dict[str, Any], str]) -> bool:
         try:
+            if isinstance(capture_data, str):
+                solution = await solve_captcha(capture_data)
+                if solution:
+                    verify_response = await self.make_request(
+                        "POST",
+                        f"{self._base_url}/captures/verify",
+                        headers=headers,
+                        json={
+                            "captureType": solution.type,
+                            "captureContext": {"c": solution.answer} if solution.type != "STARS_V1" else {"a": solution.answer}
+                        }
+                    )
+                    return verify_response is not None
+                else:
+                    logger.error(f"❌ {self.session_name} | Failed to solve encrypted captcha")
+                    return False
+            
+            if not isinstance(capture_data, dict):
+                logger.error(f"❌ {self.session_name} | Invalid capture_data type: {type(capture_data)}")
+                return False
+                
             capture_type = capture_data.get('type')
-            context = capture_data.get('context', {})
+            context = capture_data.get('context')
             
             if capture_type == 'SUMM_V1':
-                a = context.get('a', 0)
-                b = context.get('b', 0)
-                result = a + b
-                
-                verify_response = await self.make_request(
-                    "POST",
-                    f"{self._base_url}/captures/verify",
-                    headers=headers,
-                    json={
-                        "captureType": capture_type,
-                        "captureContext": {"c": result}
-                    }
-                )
-                
-                return verify_response is not None
+                if isinstance(context, str):
+                    solution = await solve_captcha(context)
+                    if solution:
+                        verify_response = await self.make_request(
+                            "POST",
+                            f"{self._base_url}/captures/verify",
+                            headers=headers,
+                            json={
+                                "captureType": capture_type,
+                                "captureContext": {"c": solution.answer}
+                            }
+                        )
+                        return verify_response is not None
+                    else:
+                        logger.error(f"❌ {self.session_name} | Failed to solve captcha")
+                        return False
+                else:
+                    a = context.get('a', 0)
+                    b = context.get('b', 0)
+                    result = a + b
+                    verify_response = await self.make_request(
+                        "POST",
+                        f"{self._base_url}/captures/verify",
+                        headers=headers,
+                        json={
+                            "captureType": capture_type,
+                            "captureContext": {"c": result}
+                        }
+                    )
+                    return verify_response is not None
             elif capture_type == 'STARS_V1':
-                a = context.get('a', 0)
-                
-                verify_response = await self.make_request(
-                    "POST",
-                    f"{self._base_url}/captures/verify",
-                    headers=headers,
-                    json={
-                        "captureType": capture_type,
-                        "captureContext": {"a": a}
-                    }
-                )
-                
-                return verify_response is not None
+                if isinstance(context, str):
+                    solution = await solve_captcha(context)
+                    if solution:
+                        verify_response = await self.make_request(
+                            "POST",
+                            f"{self._base_url}/captures/verify",
+                            headers=headers,
+                            json={
+                                "captureType": capture_type,
+                                "captureContext": {"a": solution.answer}
+                            }
+                        )
+                        return verify_response is not None
+                    else:
+                        logger.error(f"❌ {self.session_name} | Failed to solve captcha")
+                        return False
+                else:
+                    a = context.get('a', 0)
+                    verify_response = await self.make_request(
+                        "POST",
+                        f"{self._base_url}/captures/verify",
+                        headers=headers,
+                        json={
+                            "captureType": capture_type,
+                            "captureContext": {"a": a}
+                        }
+                    )
+                    return verify_response is not None
             elif capture_type == 'MULTIPLY_V1':
-                a = context.get('a', 0)
-                b = context.get('b', 0)
-                result = a * b
-                
-                verify_response = await self.make_request(
-                    "POST",
-                    f"{self._base_url}/captures/verify",
-                    headers=headers,
-                    json={
-                        "captureType": capture_type,
-                        "captureContext": {"c": result}
-                    }
-                )
-                
-                return verify_response is not None
+                if isinstance(context, str):
+                    solution = await solve_captcha(context)
+                    if solution:
+                        verify_response = await self.make_request(
+                            "POST",
+                            f"{self._base_url}/captures/verify",
+                            headers=headers,
+                            json={
+                                "captureType": capture_type,
+                                "captureContext": {"c": solution.answer}
+                            }
+                        )
+                        return verify_response is not None
+                    else:
+                        logger.error(f"❌ {self.session_name} | Failed to solve captcha")
+                        return False
+                else:
+                    a = context.get('a', 0)
+                    b = context.get('b', 0)
+                    result = a * b
+                    verify_response = await self.make_request(
+                        "POST",
+                        f"{self._base_url}/captures/verify",
+                        headers=headers,
+                        json={
+                            "captureType": capture_type,
+                            "captureContext": {"c": result}
+                        }
+                    )
+                    return verify_response is not None
             elif capture_type == 'SUBTRACT_V1':
-                a = context.get('a', 0)
-                b = context.get('b', 0)
-                result = a - b
-                
-                verify_response = await self.make_request(
-                    "POST",
-                    f"{self._base_url}/captures/verify",
-                    headers=headers,
-                    json={
-                        "captureType": capture_type,
-                        "captureContext": {"c": result}
-                    }
-                )
-                
-                return verify_response is not None
+                if isinstance(context, str):
+                    solution = await solve_captcha(context)
+                    if solution:
+                        verify_response = await self.make_request(
+                            "POST",
+                            f"{self._base_url}/captures/verify",
+                            headers=headers,
+                            json={
+                                "captureType": capture_type,
+                                "captureContext": {"c": solution.answer}
+                            }
+                        )
+                        return verify_response is not None
+                    else:
+                        logger.error(f"❌ {self.session_name} | Failed to solve captcha")
+                        return False
+                else:
+                    a = context.get('a', 0)
+                    b = context.get('b', 0)
+                    result = a - b
+                    verify_response = await self.make_request(
+                        "POST",
+                        f"{self._base_url}/captures/verify",
+                        headers=headers,
+                        json={
+                            "captureType": capture_type,
+                            "captureContext": {"c": result}
+                        }
+                    )
+                    return verify_response is not None
             else:
                 logger.error(
                     f"❌ {self.session_name} | "

@@ -17,3 +17,4 @@ scripts/
 hash_check_results.html
 hash_check_results.json
 page.js
+captcha.js
