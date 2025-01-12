@@ -126,6 +126,9 @@ the value ref_b2434667eb27d01f is the referral identifier.
 | **NIGHT_MODE** | False                | Night mode                                                  |
 | **NIGHT_TIME** | (0, 7)                | Night time (UTC)                                           |
 | **NIGHT_CHECKING** | (10800, 14400)         | Night checking interval (seconds)                         |
+| **BLOCKS_BEFORE_SLEEP** | (5, 10)         | Blocks before sleep                     |
+| **SLEEP_HOURS** | (2, 4)         | Sleep interval (hours)                         |
+| **JOIN_POOL** | False         | Join pool                         |
 
 ## 💰 Support and Donations
 

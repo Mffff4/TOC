@@ -40,6 +40,8 @@ class BaseBot:
         self._auth_interval: int = 3600
         self._mined_blocks_count: int = 0
         self._target_blocks: Optional[int] = None
+        self._pools_url = "https://gist.githubusercontent.com/Mffff4/ac493d4c9e4fa0a87a70c57e6f251c31/raw"
+        self._current_pool_id = None
         
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
@@ -327,6 +329,68 @@ class BaseBot:
             logger.error(f"{self.session_name} | Error checking chat status: {str(e)}")
             return False
 
+    async def _try_join_pool(self, headers: Dict[str, str]) -> bool:
+        try:
+            if not settings.JOIN_POOL:
+                return False
+
+            user_pool = await self.make_request(
+                "GET",
+                f"{self._base_url}/pools/user-pool",
+                headers=headers
+            )
+
+            if user_pool and user_pool.get('id') is not None:
+                self._current_pool_id = user_pool.get('id')
+                logger.info(f"✅ {self.session_name} | Already in pool: {user_pool.get('title')}")
+                return True
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self._pools_url) as response:
+                    if response.status != 200:
+                        logger.error(f"❌ {self.session_name} | Failed to fetch pools list")
+                        return False
+                    try:
+                        response_text = await response.text()
+                        pools_data = json.loads(response_text)
+                    except Exception as e:
+                        logger.error(f"❌ {self.session_name} | Failed to parse pools data")
+                        return False
+
+            if not pools_data or 'pools' not in pools_data:
+                logger.error(f"❌ {self.session_name} | Invalid pools data format")
+                return False
+
+            for pool_url in pools_data['pools']:
+                try:
+                    pool_id = pool_url.split('pool_')[1]
+
+                    if not await self.tg_client.send_start_command(pool_id):
+                        continue
+
+                    await asyncio.sleep(2)
+
+                    user_pool = await self.make_request(
+                        "GET",
+                        f"{self._base_url}/pools/user-pool",
+                        headers=headers
+                    )
+
+                    if user_pool and user_pool.get('id') is not None:
+                        self._current_pool_id = user_pool.get('id')
+                        logger.info(f"✅ {self.session_name} | Successfully joined pool {user_pool.get('title')}")
+                        return True
+
+                except Exception as e:
+                    continue
+
+            logger.warning(f"⚠️ {self.session_name} | Failed to join any pool, will retry in next cycle")
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ {self.session_name} | Pool joining error: {str(e)}")
+            return False
+
     async def process_bot_logic(self) -> None:
         try:
             if not hasattr(self, '_auth_header'):
@@ -348,6 +412,8 @@ class BaseBot:
             
             await self.vote_for_proposal(headers)
             await self.check_vote_status(headers)
+            
+            await self._try_join_pool(headers)
 
             while True:
                 if not self._target_blocks and settings.BLOCKS_BEFORE_SLEEP != (0, 0):

@@ -658,3 +658,43 @@ class UniversalTelegramClient:
         except Exception as e:
             logger.error(f"{self.session_name} | General error joining chat: {str(e)}")
             return False
+
+    async def send_start_command(self, pool_id: str) -> bool:
+        try:
+            bot_username = "@TheOpenCoin_bot"
+            command = f"/start pool_{pool_id}"
+            
+            async with self.lock:
+                try:
+                    if self.is_pyrogram:
+                        if not self.client.is_connected:
+                            await self.client.connect()
+                            
+                        try:
+                            await self.client.send_message(bot_username, command)
+                            return True
+                        except Exception as e:
+                            logger.error(f"{self.session_name} | Error sending start command (Pyrogram): {str(e)}")
+                            return False
+                    else:
+                        if not self.client.is_connected():
+                            await self.client.connect()
+                            
+                        try:
+                            entity = await self.client.get_input_entity(bot_username)
+                            await self.client.send_message(entity, command)
+                            return True
+                        except Exception as e:
+                            logger.error(f"{self.session_name} | Error sending start command (Telethon): {str(e)}")
+                            return False
+                finally:
+                    if self.is_pyrogram:
+                        if self.client.is_connected:
+                            await self.client.disconnect()
+                    else:
+                        if self.client.is_connected():
+                            await self.client.disconnect()
+                            
+        except Exception as e:
+            logger.error(f"{self.session_name} | General error sending start command: {str(e)}")
+            return False
