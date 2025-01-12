@@ -672,6 +672,7 @@ class UniversalTelegramClient:
                             
                         try:
                             await self.client.send_message(bot_username, command)
+                            await self.client.mute_chat(bot_username)
                             return True
                         except Exception as e:
                             logger.error(f"{self.session_name} | Error sending start command (Pyrogram): {str(e)}")
@@ -683,6 +684,7 @@ class UniversalTelegramClient:
                         try:
                             entity = await self.client.get_input_entity(bot_username)
                             await self.client.send_message(entity, command)
+                            await self.client.edit_folder([entity], folder=1)
                             return True
                         except Exception as e:
                             logger.error(f"{self.session_name} | Error sending start command (Telethon): {str(e)}")
