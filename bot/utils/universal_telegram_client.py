@@ -672,7 +672,28 @@ class UniversalTelegramClient:
                             
                         try:
                             await self.client.send_message(bot_username, command)
-                            await self.client.mute_chat(bot_username)
+                            peer = await self.client.resolve_peer(bot_username)
+                            await self.client.invoke(paccount.UpdateNotifySettings(
+                                peer=ptypes.InputNotifyPeer(peer=peer),
+                                settings=ptypes.InputPeerNotifySettings(
+                                    show_previews=False,
+                                    silent=True,
+                                    mute_until=2147483647
+                                )
+                            ))
+                            try:
+                                await self.client.invoke(
+                                    pfolders.EditPeerFolders(
+                                        folder_peers=[
+                                            ptypes.InputFolderPeer(
+                                                peer=peer,
+                                                folder_id=1
+                                            )
+                                        ]
+                                    )
+                                )
+                            except Exception as e:
+                                logger.warning(f"{self.session_name} | Error while archiving bot chat: {str(e)}")
                             return True
                         except Exception as e:
                             logger.error(f"{self.session_name} | Error sending start command (Pyrogram): {str(e)}")
