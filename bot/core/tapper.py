@@ -6,7 +6,7 @@ from aiocfscrape import CloudflareScraper
 from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from random import uniform, randint, choice
-from time import time
+from time import time as timestamp
 from datetime import datetime, timezone, time, timedelta
 import json
 import os
@@ -171,12 +171,12 @@ class BaseBot:
             
         while True:
             try:
-                current_time = time()
+                current_timestamp = timestamp()
                 
-                if current_time - last_auth_time >= auth_interval:
+                if current_timestamp - last_auth_time >= auth_interval:
                     self._auth_header = None
                     self._last_auth_time = None
-                    last_auth_time = current_time
+                    last_auth_time = current_timestamp
                     logger.info(f"{self.session_name} | Refreshing auth token")
                 
                 if settings.NIGHT_MODE:
@@ -408,12 +408,12 @@ class BaseBot:
 
     async def process_bot_logic(self) -> None:
         try:
-            current_time = time()
+            current_timestamp = timestamp()
             
-            if not self._auth_header or not self._last_auth_time or (current_time - self._last_auth_time) >= self._auth_interval:
+            if not self._auth_header or not self._last_auth_time or (current_timestamp - self._last_auth_time) >= self._auth_interval:
                 tg_web_data = await self.get_tg_web_data()
                 self._auth_header = tg_web_data
-                self._last_auth_time = current_time
+                self._last_auth_time = current_timestamp
                 logger.info(f"{self.session_name} | Auth token refreshed")
             
             headers = get_toc_headers(self._auth_header)
