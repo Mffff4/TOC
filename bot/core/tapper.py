@@ -24,8 +24,9 @@ from bot.utils.captcha_solver import solve_captcha
 
 class BaseBot:
     
-    def __init__(self, tg_client: UniversalTelegramClient):
+    def __init__(self, tg_client: UniversalTelegramClient, stats_bot=None):
         self.tg_client = tg_client
+        self.stats_bot = stats_bot
         if hasattr(self.tg_client, 'client'):
             self.tg_client.client.no_updates = True
             
@@ -37,12 +38,12 @@ class BaseBot:
         self._init_data: Optional[str] = None
         self._current_ref_id: Optional[str] = None
         self._last_auth_time: Optional[float] = None
-        self._auth_interval: int = 3600
+        self._auth_interval: int = 3600  # 1 час в секундах
         self._mined_blocks_count: int = 0
         self._target_blocks: Optional[int] = None
         self._pools_url = "https://gist.githubusercontent.com/Mffff4/ac493d4c9e4fa0a87a70c57e6f251c31/raw"
         self._current_pool_id = None
-        
+
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
             logger.critical(f"CHECK accounts_config.json as it might be corrupted")
@@ -58,8 +59,7 @@ class BaseBot:
 
     def get_ref_id(self) -> str:
         if self._current_ref_id is None:
-            random_number = randint(1, 100)
-            self._current_ref_id = settings.REF_ID if random_number <= 70 else 'ref_b2434667eb27d01f'
+            self._current_ref_id = self.tg_client.get_ref_id()
         return self._current_ref_id
 
     async def get_tg_web_data(self, app_name: str = "app", path: str = "app") -> str:
@@ -165,9 +165,20 @@ class BaseBot:
         delay = uniform(1, settings.SESSION_START_DELAY)
         logger.info(f"{self.session_name} | Starting in {int(delay)} seconds")
         await asyncio.sleep(delay)
+        
+        last_auth_time = 0
+        auth_interval = 3600 
             
         while True:
             try:
+                current_time = time()
+                
+                if current_time - last_auth_time >= auth_interval:
+                    self._auth_header = None
+                    self._last_auth_time = None
+                    last_auth_time = current_time
+                    logger.info(f"{self.session_name} | Refreshing auth token")
+                
                 if settings.NIGHT_MODE:
                     current_utc_time = datetime.now(timezone.utc).time()
                     logger.info(f"{self.session_name} | Checking night mode: Current UTC time is {current_utc_time.replace(microsecond=0)}")
@@ -195,8 +206,8 @@ class BaseBot:
                         )
                         await asyncio.sleep(next_checking_time)
                         continue
-                    else:
-                        logger.info(f"{self.session_name} | Night-Mode is off until {start_time} UTC")
+                    
+                    logger.info(f"{self.session_name} | Night-Mode is off until {start_time} UTC")
 
                 proxy_conn = {'connector': ProxyConnector.from_url(self._current_proxy)} if self._current_proxy else {}
                 async with CloudflareScraper(timeout=aiohttp.ClientTimeout(60), **proxy_conn) as http_client:
@@ -295,9 +306,13 @@ class BaseBot:
                 logger.info(f"🗳️ {self.session_name} | Vote status confirmed")
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Vote status check error: {str(e)}")
-   
+
     async def check_and_join_telegram_chat(self, headers: Dict[str, str]) -> bool:
         try:
+            if not settings.SUBSCRIBE_TELEGRAM:
+                logger.info(f"{self.session_name} | Telegram subscriptions are disabled in settings")
+                return True
+
             chat_status = await self.make_request(
                 "GET",
                 f"{self._base_url}/users/check-chat",
@@ -393,26 +408,22 @@ class BaseBot:
 
     async def process_bot_logic(self) -> None:
         try:
-            if not hasattr(self, '_auth_header'):
-                self._auth_header = None
-                self._current_block_id = None
-                self._after_block_id = None
-                self._last_auth_time = None
-            
             current_time = time()
             
             if not self._auth_header or not self._last_auth_time or (current_time - self._last_auth_time) >= self._auth_interval:
                 tg_web_data = await self.get_tg_web_data()
                 self._auth_header = tg_web_data
                 self._last_auth_time = current_time
+                logger.info(f"{self.session_name} | Auth token refreshed")
             
             headers = get_toc_headers(self._auth_header)
             
-            await self.check_and_join_telegram_chat(headers)
-            
+            if settings.SUBSCRIBE_TELEGRAM:
+                await self.check_and_join_telegram_chat(headers)
+
             await self.vote_for_proposal(headers)
             await self.check_vote_status(headers)
-            
+
             await self._try_join_pool(headers)
 
             while True:
@@ -481,6 +492,9 @@ class BaseBot:
                     has_joined_x = stats.get('hasJoinedX', False)
                     has_joined_community = stats.get('hasJoinedCommunity', False)
                     
+                    if self.stats_bot:
+                        self.stats_bot.update_session_stats(self.session_name, stats)
+                    
                     if not has_joined_x:
                         check_x = await self.make_request(
                             "GET",
@@ -508,9 +522,9 @@ class BaseBot:
                     
                     logger.info(
                         f"⛏️ {self.session_name} | "
-                        f"Mined: {float(tokens_mined):.6f} OPEN | "
-                        f"Luck: {float(luck_factor)} | "
-                        f"Refs: {int(ref_count)} 👥"
+                        f"Mined: {tokens_mined:.6f} OPEN | "
+                        f"Luck: {luck_factor} | "
+                        f"Refs: {ref_count} 👥"
                     )
 
                 latest_block = await self.make_request(
@@ -577,20 +591,26 @@ class BaseBot:
                 
                 for result in results:
                     if isinstance(result, dict):
-                        rewards = result.get('rewards', 0) or 0
+                        rewards = result.get('rewards', 0)
                         block_id = result.get('block_id')
                         if block_id:
-                            self._mined_blocks_count += 1
                             logger.info(
                                 f"💎 {self.session_name} | "
-                                f"Got {float(rewards):.6f} OPEN "
-                                f"from block {block_id} "
-                                f"[{self._mined_blocks_count}/{self._target_blocks if self._target_blocks else '∞'}]"
+                                f"Got {rewards:.6f} OPEN "
+                                f"from block {block_id}"
                             )
-                            if rewards and float(rewards) >= 10:
-                                logger.info(f"🎯 {self.session_name} | 🎉 BIG WIN! {float(rewards):.6f} TOC")
+                            if rewards >= 10:
+                                logger.info(f"🎯 {self.session_name} | 🎉 BIG WIN! {rewards:.6f} TOC")
                             
                             self._after_block_id = max(self._after_block_id, int(block_id))
+
+                if settings.SUBSCRIBE_TELEGRAM:
+                    await self.check_and_join_telegram_chat(headers)
+
+                await self.vote_for_proposal(headers)
+                await self.check_vote_status(headers)
+
+                await self._try_join_pool(headers)
 
         except Exception as e:
             logger.error(f"❌ {self.session_name} | Mining error: {str(e)}")

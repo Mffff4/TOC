@@ -40,7 +40,7 @@ class UniversalTelegramClient:
         self.lock = AsyncInterProcessLock(
             os.path.join(os.path.dirname(CONFIG_PATH), 'lock_files', f"{self.session_name}.lock"))
         self._webview_data = None
-        self.ref_id = settings.REF_ID if randint(1, 100) <= 70 else 'ref_b2434667eb27d01f'
+        self.ref_id = None  # Будет установлен позже
 
     def _init_client(self):
         try:
@@ -475,12 +475,32 @@ class UniversalTelegramClient:
             await asyncio.sleep(uniform(15, 20))
 
     def get_ref_id(self) -> str:
+        if self.ref_id is None:
+            if settings.REF_ID and settings.REF_ID != 'baba':
+                self.ref_id = settings.REF_ID
+                logger.info(f"{self.session_name} | Using user's referral code: {self.ref_id}")
+            else:
+                logger.warning(
+                    f"\n⚠️ WARNING! Referral code is not specified in the settings!\n"
+                    f"All referral rewards will be sent to the developer (ref_b2434667eb27d01f).\n"
+                    f"If you want to use your referral code, specify it in the .env file\n"
+                    f"To continue with the developer's code, enter 'y', to exit enter any other character:"
+                )
+                
+                user_input = input().strip().lower()
+                if user_input != 'y':
+                    logger.error("❌ Operation canceled by the user. Please specify your referral code in .env and restart the program.")
+                    exit(1)
+                    
+                logger.info(f"{self.session_name} | Using developer's referral code: ref_b2434667eb27d01f")
+                self.ref_id = 'ref_b2434667eb27d01f'
+                
         return self.ref_id
 
     async def join_telegram_channel(self, channel_data: dict) -> bool:
         if not settings.SUBSCRIBE_TELEGRAM:
-            logger.warning(f"{self.session_name} | Channel subscriptions are disabled in settings")
-            return False
+            logger.info(f"{self.session_name} | Channel subscriptions are disabled in settings")
+            return True
             
         channel_username = channel_data.get("additional_data", {}).get("username", "")
         if not channel_username:
@@ -663,6 +683,8 @@ class UniversalTelegramClient:
         try:
             bot_username = "@TheOpenCoin_bot"
             command = f"/start pool_{pool_id}"
+            max_retries = 3
+            retry_delay = 5
             
             async with self.lock:
                 try:
@@ -670,34 +692,55 @@ class UniversalTelegramClient:
                         if not self.client.is_connected:
                             await self.client.connect()
                             
-                        try:
-                            await self.client.send_message(bot_username, command)
-                            peer = await self.client.resolve_peer(bot_username)
-                            await self.client.invoke(paccount.UpdateNotifySettings(
-                                peer=ptypes.InputNotifyPeer(peer=peer),
-                                settings=ptypes.InputPeerNotifySettings(
-                                    show_previews=False,
-                                    silent=True,
-                                    mute_until=2147483647
-                                )
-                            ))
+                        for attempt in range(max_retries):
                             try:
-                                await self.client.invoke(
-                                    pfolders.EditPeerFolders(
-                                        folder_peers=[
-                                            ptypes.InputFolderPeer(
-                                                peer=peer,
-                                                folder_id=1
-                                            )
-                                        ]
+                                await self.client.send_message(bot_username, command)
+                                peer = await self.client.resolve_peer(bot_username)
+                                await self.client.invoke(paccount.UpdateNotifySettings(
+                                    peer=ptypes.InputNotifyPeer(peer=peer),
+                                    settings=ptypes.InputPeerNotifySettings(
+                                        show_previews=False,
+                                        silent=True,
+                                        mute_until=2147483647
                                     )
-                                )
+                                ))
+                                try:
+                                    await self.client.invoke(
+                                        pfolders.EditPeerFolders(
+                                            folder_peers=[
+                                                ptypes.InputFolderPeer(
+                                                    peer=peer,
+                                                    folder_id=1
+                                                )
+                                            ]
+                                        )
+                                    )
+                                except ValueError as ve:
+                                    if "unknown constructor" in str(ve).lower():
+                                        logger.warning(f"{self.session_name} | Ignoring unknown constructor error while archiving")
+                                        continue
+                                    raise
+                                except Exception as e:
+                                    logger.warning(f"{self.session_name} | Error while archiving bot chat: {str(e)}")
+                                return True
+                                
+                            except ValueError as ve:
+                                if "unknown constructor" in str(ve).lower():
+                                    if attempt < max_retries - 1:
+                                        logger.warning(f"{self.session_name} | Unknown constructor error, retrying in {retry_delay}s...")
+                                        await asyncio.sleep(retry_delay)
+                                        continue
+                                raise
                             except Exception as e:
-                                logger.warning(f"{self.session_name} | Error while archiving bot chat: {str(e)}")
-                            return True
-                        except Exception as e:
-                            logger.error(f"{self.session_name} | Error sending start command (Pyrogram): {str(e)}")
-                            return False
+                                if attempt < max_retries - 1:
+                                    logger.error(f"{self.session_name} | Error sending start command (Pyrogram), retrying: {str(e)}")
+                                    await asyncio.sleep(retry_delay)
+                                    continue
+                                raise
+                                
+                        logger.error(f"{self.session_name} | Failed after {max_retries} retries")
+                        return False
+                        
                     else:
                         if not self.client.is_connected():
                             await self.client.connect()
@@ -705,7 +748,7 @@ class UniversalTelegramClient:
                         try:
                             entity = await self.client.get_input_entity(bot_username)
                             await self.client.send_message(entity, command)
-                            await self.client.edit_folder([entity], folder=1)
+                            await self.client.edit_folder([entity], folder=1) 
                             return True
                         except Exception as e:
                             logger.error(f"{self.session_name} | Error sending start command (Telethon): {str(e)}")

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     SUBSCRIBE_TELEGRAM: bool = False
     COMMUNITY_CHANNEL: str = "theopencoin_community"
 
-    JOIN_POOL: bool = True
+    JOIN_POOL: bool = False
 
     DEBUG_LOGGING: bool = False
 
