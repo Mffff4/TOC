@@ -43,6 +43,8 @@ class BaseBot:
         self._target_blocks: Optional[int] = None
         self._pools_url = "https://gist.githubusercontent.com/Mffff4/ac493d4c9e4fa0a87a70c57e6f251c31/raw"
         self._current_pool_id = None
+        self._current_block_id: Optional[int] = None
+        self._after_block_id: Optional[int] = None
 
         session_config = config_utils.get_session_config(self.session_name, CONFIG_PATH)
         if not all(key in session_config for key in ('api', 'user_agent')):
