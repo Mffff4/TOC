@@ -7,7 +7,7 @@ from aiohttp_proxy import ProxyConnector
 from better_proxy import Proxy
 from random import uniform, randint, choice
 from time import time
-from datetime import datetime, timezone, time
+from datetime import datetime, timezone, time, timedelta
 import json
 import os
 
@@ -184,7 +184,7 @@ class BaseBot:
                     logger.info(f"{self.session_name} | Checking night mode: Current UTC time is {current_utc_time.replace(microsecond=0)}")
 
                     start_time = time(hour=settings.NIGHT_TIME[0], minute=settings.NIGHT_TIME[1])
-                    end_time = time(hour=7)
+                    end_time = time(hour=7, minute=0)
 
                     next_checking_time = randint(settings.NIGHT_CHECKING[0], settings.NIGHT_CHECKING[1])
 
@@ -195,7 +195,7 @@ class BaseBot:
                     is_sleep_time = False
                     if start_minutes <= end_minutes:
                         is_sleep_time = start_minutes <= current_minutes <= end_minutes
-                    else:
+                    else:  # Если период захватывает полночь
                         is_sleep_time = current_minutes >= start_minutes or current_minutes <= end_minutes
 
                     if is_sleep_time:
