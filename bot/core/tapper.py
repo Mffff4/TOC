@@ -136,6 +136,10 @@ class BaseBot:
                 async with getattr(self._http_client, method.lower())(url, **kwargs) as response:
                     if response.status == 200:
                         return await response.json()
+                    elif response.status == 401:
+                        self._auth_header = None
+                        self._last_auth_time = None
+                        return None
                     elif response.status == 409:
                         response_json = await response.json()
                         if isinstance(response_json, dict) and response_json.get('code') == 'capture_required':
@@ -413,10 +417,15 @@ class BaseBot:
             current_timestamp = timestamp()
             
             if not self._auth_header or not self._last_auth_time or (current_timestamp - self._last_auth_time) >= self._auth_interval:
-                tg_web_data = await self.get_tg_web_data()
-                self._auth_header = tg_web_data
-                self._last_auth_time = current_timestamp
-                logger.info(f"{self.session_name} | Auth token refreshed")
+                try:
+                    tg_web_data = await self.get_tg_web_data()
+                    self._auth_header = tg_web_data
+                    self._last_auth_time = current_timestamp
+                    logger.info(f"{self.session_name} | Auth token refreshed")
+                except Exception as e:
+                    logger.error(f"❌ {self.session_name} | Error refreshing auth token: {str(e)}")
+                    await asyncio.sleep(5)
+                    return
             
             headers = get_toc_headers(self._auth_header)
             
