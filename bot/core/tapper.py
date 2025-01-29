@@ -580,7 +580,7 @@ class BaseBot:
                                     )
                                 else:
                                     logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
-                                    #exit(1)
+                                    exit(1)
                         elif result.get('code') == 'user_blocked':
                             block_minutes = int(result.get('message', '').split()[6])
                             logger.warning(
