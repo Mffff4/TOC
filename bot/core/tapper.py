@@ -139,7 +139,13 @@ class BaseBot:
                     elif response.status == 401:
                         self._auth_header = None
                         self._last_auth_time = None
-                        return None
+                        self._after_block_id = None
+                        self._current_block_id = None
+                        self._current_pool_id = None
+                        self._mined_blocks_count = 0
+                        self._target_blocks = None
+                        await asyncio.sleep(5)
+                        return await self.process_bot_logic()
                     elif response.status == 409:
                         response_json = await response.json()
                         if isinstance(response_json, dict) and response_json.get('code') == 'capture_required':
@@ -574,7 +580,7 @@ class BaseBot:
                                     )
                                 else:
                                     logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
-                                    exit(1)
+                                    #exit(1)
                         elif result.get('code') == 'user_blocked':
                             block_minutes = int(result.get('message', '').split()[6])
                             logger.warning(
