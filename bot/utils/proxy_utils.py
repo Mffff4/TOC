@@ -62,18 +62,65 @@ def get_unused_proxies(accounts_config: dict, proxy_path: str) -> list[str]:
 
 
 async def check_proxy(proxy: str) -> bool:
-    url = 'https://ifconfig.me/ip'
-    proxy_conn = ProxyConnector.from_url(proxy)
+    if not proxy or not isinstance(proxy, str):
+        logger.warning(f"Invalid proxy format: {proxy}")
+        return False
+        
     try:
-        async with aiohttp.ClientSession(connector=proxy_conn, timeout=aiohttp.ClientTimeout(15)) as session:
-            response = await session.get(url)
-            if response.status == 200:
-                logger.success(f"Successfully connected to proxy. IP: {await response.text()}")
-                if not proxy_conn.closed:
-                    proxy_conn.close()
-                return True
-    except Exception:
-        logger.warning(f"Proxy {proxy} didn't respond")
+        if '://' not in proxy:
+            logger.warning(f"No protocol specified in proxy: {proxy}")
+            return False
+            
+        protocol = proxy.split('://')[0].lower()
+        if protocol not in PROXY_TYPES:
+            logger.warning(f"Unsupported proxy protocol: {protocol}")
+            return False
+            
+        urls = [
+            'https://api.ipify.org'
+        ]
+        
+        try:
+            proxy_conn = ProxyConnector.from_url(proxy)
+        except ValueError as e:
+            logger.warning(f"Invalid proxy URL format: {proxy} - {str(e)}")
+            return False
+        except Exception as e:
+            logger.warning(f"Error creating proxy connector: {proxy} - {str(e)}")
+            return False
+    
+        try:
+            async with aiohttp.ClientSession(connector=proxy_conn, timeout=aiohttp.ClientTimeout(15)) as session:
+                for url in urls:
+                    try:
+                        async with session.get(url) as response:
+                            if response.status == 200:
+                                ip = await response.text()
+                                if ip and len(ip.split('.')) == 4:
+                                    logger.success(f"Successfully connected to proxy via {url}. IP: {ip}")
+                                    return True
+                                else:
+                                    logger.warning(f"Invalid IP response from {url}: {ip}")
+                                    continue
+                    except aiohttp.ClientError as e:
+                        logger.warning(f"Connection error with {url}: {str(e)}")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Unexpected error with {url}: {str(e)}")
+                        continue
+                
+                logger.warning(f"Proxy {proxy} failed all connection attempts")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"Proxy {proxy} didn't respond: {str(e)}")
+            return False
+        finally:
+            if proxy_conn and not proxy_conn.closed:
+                proxy_conn.close()
+                
+    except Exception as e:
+        logger.warning(f"Unexpected error checking proxy {proxy}: {str(e)}")
         return False
 
 
