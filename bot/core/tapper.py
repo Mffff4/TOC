@@ -706,8 +706,25 @@ class BaseBot:
                     else:
                         logger.error(f"❌ {self.session_name} | Failed to solve captcha")
                         return False
-                else:
-                    a = context.get('a', 0)
+                elif capture_type == 'SLIDER_V1':
+                    if isinstance(context, str):
+                        solution = await solve_captcha(context)
+                        if solution:
+                            verify_response = await self.make_request(
+                                "POST",
+                                f"{self._base_url}/captures/verify",
+                                headers=headers,
+                                json={
+                                    "captureType": capture_type,
+                                    "captureContext": {"a": solution.answer}
+                                }
+                            )
+                            return verify_response is not None
+                        else:
+                            logger.error(f"❌ {self.session_name} | Failed to solve captcha")
+                            return False
+                    else:
+                        a = context.get('a', 0)
                     verify_response = await self.make_request(
                         "POST",
                         f"{self._base_url}/captures/verify",

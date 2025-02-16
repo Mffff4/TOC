@@ -107,7 +107,7 @@ class CaptchaSolver:
         try:
             text = decrypted.decode()
             parts = text.split('-')
-            if len(parts) >= 3:
+            if len(parts) >= 2:
                 if parts[0] == 'STARS_V1':
                     return CaptchaSolution(
                         type='STARS_V1',
@@ -120,6 +120,12 @@ class CaptchaSolver:
                         type='SUMM_V1',
                         answer=a + b,
                         raw_context={'a': a, 'b': b}
+                    )
+                elif parts[0] == 'SLIDER_V1':
+                    return CaptchaSolution(
+                        type='SLIDER_V1',
+                        answer=int(parts[1]),
+                        raw_context={'slider_value': int(parts[1])}
                     )
             try:
                 data = json.loads(text)
@@ -141,7 +147,6 @@ class CaptchaSolver:
         try:
             current_time = time.time()
             if not self._key or (current_time - self._key_timestamp) >= self._key_cache_time:
-                print(f"Key expired or not found, fetching new key...")
                 key = await self._get_key()
                 if not key:
                     raise ValueError("Failed to obtain key for decryption")
@@ -162,11 +167,10 @@ class CaptchaSolver:
                     return result
             except Exception as e:
                 print(f"Error during decryption: {str(e)}")
-                # Если ошибка дешифровки - пробуем обновить ключ и повторить
                 if "decryption failed" in str(e).lower():
                     print("Decryption failed, trying with new key...")
-                    self._key = None  # Сбрасываем ключ
-                    return await self.solve(capture)  # Рекурсивно пробуем еще раз
+                    self._key = None 
+                    return await self.solve(capture)
                 return None
         except Exception as e:
             print(f"Error solving captcha: {str(e)}")
