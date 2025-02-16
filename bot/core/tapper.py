@@ -676,7 +676,11 @@ class BaseBot:
                         headers=headers,
                         json={
                             "captureType": solution.type,
-                            "captureContext": {"c": solution.answer} if solution.type != "STARS_V1" else {"a": solution.answer}
+                            "captureContext": {
+                                "c": solution.answer
+                            } if solution.type == "SUMM_V1" else {
+                                "a": solution.answer
+                            }
                         }
                     )
                     return verify_response is not None
@@ -776,7 +780,7 @@ class BaseBot:
                         headers=headers,
                         json={
                             "captureType": capture_type,
-                            "captureContext": {"c": slider_value}
+                            "captureContext": {"a": slider_value}
                         }
                     )
                     return verify_response is not None
