@@ -582,15 +582,21 @@ class BaseBot:
                                     logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
                                     exit(1)
                         elif result.get('code') == 'user_blocked':
-                            block_minutes = int(result.get('message', '').split()[6])
-                            logger.warning(
-                                f"⛔️ {self.session_name} | User is blocked from mining for {block_minutes} minutes"
-                                f"\n💤 Going to sleep..."
-                            )
-                            await asyncio.sleep(block_minutes * 60)
-                            self._auth_header = None
-                            self._last_auth_time = None
-                            break
+                            try:
+                                block_message = result.get('message', '')
+                                block_minutes = int(''.join(filter(str.isdigit, block_message)))
+                                logger.warning(
+                                    f"⛔️ {self.session_name} | User is blocked from mining for {block_minutes} minutes"
+                                    f"\n💤 Going to sleep..."
+                                )
+                                await asyncio.sleep(block_minutes * 60 + randint(10, 30))
+                                self._auth_header = None
+                                self._last_auth_time = None
+                                break
+                            except (ValueError, TypeError) as e:
+                                logger.error(f"❌ {self.session_name} | Error parsing block time: {str(e)}")
+                                await asyncio.sleep(60*30)  
+                                break
                     
                     if result is not None:
                         miners_count = latest_block.get('minersCount', 0)
