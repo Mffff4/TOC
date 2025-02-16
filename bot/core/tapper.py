@@ -175,8 +175,19 @@ class BaseBot:
                             return None
                     elif response.status == 409:
                         response_json = await response.json()
-                        if isinstance(response_json, dict) and response_json.get('code') == 'capture_required':
-                            return response_json
+                        if isinstance(response_json, dict):
+                            if response_json.get('code') == 'capture_required':
+                                return response_json
+                            elif 'exceeded' in response_json.get('error', '').lower():
+                                logger.warning(f"⚠️ {self.session_name} | {response_json.get('error')}")
+                                try:
+                                    wait_minutes = int(''.join(filter(str.isdigit, response_json.get('error', ''))))
+                                except ValueError:
+                                    wait_minutes = 30
+                                await asyncio.sleep(wait_minutes * 60 + randint(10, 30))
+                                self._auth_header = None
+                                self._last_auth_time = None
+                                return None
                         logger.error(f"Request conflict (409): {await response.text()}")
                         return None
                     elif response.status == 500:
@@ -607,7 +618,10 @@ class BaseBot:
                                     )
                                 else:
                                     logger.error(f"❌ {self.session_name} | Failed to pass the captcha")
-                                    exit(1)
+                                    await asyncio.sleep(60*30)
+                                    self._auth_header = None
+                                    self._last_auth_time = None
+                                    break
                         elif result.get('code') == 'user_blocked':
                             try:
                                 block_message = result.get('message', '')
@@ -622,7 +636,7 @@ class BaseBot:
                                 break
                             except (ValueError, TypeError) as e:
                                 logger.error(f"❌ {self.session_name} | Error parsing block time: {str(e)}")
-                                await asyncio.sleep(60*30)  
+                                await asyncio.sleep(60*30)
                                 break
                     
                     if result is not None:
