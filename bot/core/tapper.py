@@ -146,6 +146,33 @@ class BaseBot:
                         self._target_blocks = None
                         await asyncio.sleep(5)
                         return await self.process_bot_logic()
+                    elif response.status == 403:
+                        response_json = await response.json()
+                        if isinstance(response_json, dict):
+                            if response_json.get('code') == 'user_blocked':
+                                try:
+                                    block_message = response_json.get('message', '')
+                                    block_minutes = int(''.join(filter(str.isdigit, block_message)))
+                                    logger.warning(
+                                        f"⛔️ {self.session_name} | User is blocked from mining for {block_minutes} minutes"
+                                        f"\n💤 Going to sleep..."
+                                    )
+                                    await asyncio.sleep(block_minutes * 60 + randint(10, 30))
+                                    self._auth_header = None
+                                    self._last_auth_time = None
+                                    return None
+                                except (ValueError, TypeError) as e:
+                                    logger.error(f"❌ {self.session_name} | Error parsing block time: {str(e)}")
+                                    await asyncio.sleep(60*30)
+                                    return None
+                            else:
+                                logger.error(f"❌ {self.session_name} | Access denied: {response_json}")
+                                await asyncio.sleep(60)
+                                return None
+                        else:
+                            logger.error(f"❌ {self.session_name} | Access denied with status 403")
+                            await asyncio.sleep(60)
+                            return None
                     elif response.status == 409:
                         response_json = await response.json()
                         if isinstance(response_json, dict) and response_json.get('code') == 'capture_required':
