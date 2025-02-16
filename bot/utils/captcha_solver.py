@@ -107,7 +107,7 @@ class CaptchaSolver:
         try:
             text = decrypted.decode()
             parts = text.split('-')
-            if len(parts) >= 2:
+            if len(parts) >= 3:
                 if parts[0] == 'STARS_V1':
                     return CaptchaSolution(
                         type='STARS_V1',
